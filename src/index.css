@@ -1,0 +1,185 @@
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+/* ── Theme variables ───────────────────────────────────────── */
+:root {
+  --card: #fffcf5;
+  --ring: #a67c52;
+  --input: #dbd0ba;
+  --muted: #ece5d8;
+  --accent: #d4c8aa;
+  --border: #dbd0ba;
+  --radius: 0.25rem;
+  --chart-1: #a67c52;
+  --chart-2: #8d6e4c;
+  --chart-3: #735a3a;
+  --chart-4: #b3906f;
+  --chart-5: #c0a080;
+  --popover: #fffcf5;
+  --primary: #a67c52;
+  --sidebar: #ece5d8;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'Libre Baskerville', serif;
+  --font-serif: 'Lora', serif;
+  --secondary: #e2d8c3;
+  --background: #f5f1e6;
+  --foreground: #4a3f35;
+  --destructive: #b54a35;
+  --shadow-color: hsl(28 13% 20%);
+  --card-foreground: #4a3f35;
+  --muted-foreground: #7d6b56;
+  --accent-foreground: #4a3f35;
+  --primary-foreground: #ffffff;
+  --secondary-foreground: #5c4d3f;
+  --destructive-foreground: #ffffff;
+
+  /* App aliases */
+  --bg: var(--background);
+  --surface: var(--card);
+  --text: var(--foreground);
+  --text-dim: var(--muted-foreground);
+  --font-display: var(--font-serif);
+  --font-body: var(--font-sans);
+
+  /* Session colors — warm-shifted for parchment theme */
+  --push-color: #a05c2c;
+  --pull-color: #2c6e7a;
+  --legs-color: #6b4fa0;
+  --rest-color: #7d6b56;
+  --missed-color: #b54a35;
+}
+
+.dark {
+  --card: #3a322c;
+  --ring: #c0a080;
+  --input: #4a4039;
+  --muted: #3a322c;
+  --accent: #59493e;
+  --border: #4a4039;
+  --popover: #3a322c;
+  --primary: #c0a080;
+  --sidebar: #2d2621;
+  --secondary: #4a4039;
+  --background: #2d2621;
+  --foreground: #ece5d8;
+  --destructive: #b54a35;
+  --card-foreground: #ece5d8;
+  --muted-foreground: #c5bcac;
+  --accent-foreground: #ece5d8;
+  --primary-foreground: #2d2621;
+  --secondary-foreground: #ece5d8;
+  --destructive-foreground: #ffffff;
+
+  --bg: var(--background);
+  --surface: var(--card);
+  --text: var(--foreground);
+  --text-dim: var(--muted-foreground);
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+  /* Subtle paper texture via noise */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+textarea, input, select {
+  font-family: var(--font-mono);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Icon button ───────────────────────────────────────────── */
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.icon-btn:hover { background: var(--accent); }
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+main > * {
+  animation: fadeIn 0.2s ease forwards;
+}
+
+/* ── Rest Timer ────────────────────────────────────────────── */
+@keyframes timerSlideIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+.rest-timer-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px rgba(50,35,20,0.2) !important;
+}
+
+/* ── Mobile header adjustments ─────────────────────────────── */
+@media (max-width: 400px) {
+  .sync-label { display: none; }
+}
+
+/* ── Form inputs ───────────────────────────────────────────── */
+input, textarea, select {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--foreground);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-size: 13px;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(166,124,82,0.15);
+}
+
+/* ── Utility ───────────────────────────────────────────────── */
+.mono { font-family: var(--font-mono); }
+.serif { font-family: var(--font-serif); }
