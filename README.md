@@ -2,6 +2,8 @@
 
 A web-based Push/Pull/Legs workout tracker with calendar scheduling, daily session logging, progression tracking, and cloud sync via Supabase. Built with React and Vite.
 
+**Live app:** https://ppl-tracker-tau.vercel.app
+
 ---
 
 ## Table of Contents
