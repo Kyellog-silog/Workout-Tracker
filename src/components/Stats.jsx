@@ -10,6 +10,7 @@
 import { SESSION_META as SESSIONS } from '../data/workouts';
 import { resolvedSession, todayStr, diffDays } from '../lib/scheduler';
 import { calcStreakInfo, restoresLeft } from '../lib/streakCalc';
+import { totalVolume } from '../lib/prCalc';
 import { Icon } from './Icons';
 
 export default function Stats({ completedDays, programStart, overrides, streakRestores, onRestoreDay }) {
@@ -42,6 +43,12 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
     if (s && sessionCounts[s] !== undefined) sessionCounts[s]++;
   });
 
+  // Volume
+  const volKg = totalVolume(completedDays);
+  const volDisplay = volKg >= 1000
+    ? `${(volKg / 1000).toFixed(1)}t`
+    : `${Math.round(volKg)}kg`;
+
   const stats = [
     { label: 'WORKOUTS', value: workoutDates.length, color: '#2c6e7a' },
     { label: 'STREAK',   value: dayStreak, suffix: 'd', color: '#c48a2f', showFlame: dayStreak >= 3 },
@@ -65,6 +72,19 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
           </div>
         ))}
       </div>
+
+      {/* Volume card */}
+      {volKg > 0 && (
+        <div style={{
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 4, padding: '14px 20px',
+          boxShadow: '1px 2px 4px rgba(50,35,20,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, fontFamily: 'var(--font-mono)' }}>TOTAL VOLUME LIFTED</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 22, color: '#4a7c59' }}>{volDisplay}</div>
+        </div>
+      )}
 
       {/* Streak restore banner */}
       {breakDate && (

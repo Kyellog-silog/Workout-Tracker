@@ -13,13 +13,17 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://xuqpzzokewyheahkaapb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1cXB6em9rZXd5aGVhaGthYXBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5NjY4MzIsImV4cCI6MjA4ODU0MjgzMn0.0YuDJBGyBO2-K8l-C-e2esp__SyrM5IdOZf9_bXlcLo';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error('Missing Supabase environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)');
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Hash the passphrase so the raw phrase is never stored in the DB
-async function hashPassphrase(phrase) {
+export async function hashPassphrase(phrase) {
   const normalized = phrase.trim().toLowerCase();
   const encoded = new TextEncoder().encode(normalized);
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
@@ -45,6 +49,29 @@ export async function saveToSupabase(passphrase, payload) {
     .from('ppl_data')
     .upsert(
       { passphrase: key, data: payload, updated_at: new Date().toISOString() },
+      { onConflict: 'passphrase' }
+    );
+  if (error) throw error;
+}
+
+// ── WithHash variants accept a pre-computed SHA-256 hex string ──────────────
+// Used when App.jsx has already hashed the passphrase before storing it.
+
+export async function loadFromSupabaseWithHash(hash) {
+  const { data, error } = await supabase
+    .from('ppl_data')
+    .select('data')
+    .eq('passphrase', hash)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.data || null;
+}
+
+export async function saveToSupabaseWithHash(hash, payload) {
+  const { error } = await supabase
+    .from('ppl_data')
+    .upsert(
+      { passphrase: hash, data: payload, updated_at: new Date().toISOString() },
       { onConflict: 'passphrase' }
     );
   if (error) throw error;

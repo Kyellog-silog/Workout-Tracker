@@ -17,7 +17,8 @@
  * @returns {{ data: object, setData: Function, syncStatus: string }}
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { loadFromSupabase, saveToSupabase } from '../lib/supabase';
+import { loadFromSupabaseWithHash, saveToSupabaseWithHash } from '../lib/supabase';
+import { validateLoadedData } from '../lib/securityGuards';
 
 const LOCAL_KEY = 'ppl-app-data';
 const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
@@ -25,7 +26,9 @@ const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
 function readLocal() {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return validateLoadedData(parsed);
   } catch { return null; }
 }
 
@@ -74,27 +77,28 @@ export function useSyncedData(passphrase) {
     if (!passphrase) return;
     setSyncStatus('loading');
 
-    loadFromSupabase(passphrase)
+    loadFromSupabaseWithHash(passphrase)
       .then(remote => {
         const local = readLocal() || DEFAULT_DATA;
 
         if (remote) {
           // --- SAFE MERGE LOGIC ---
-          // Base is remote. Apply local changes if they are newer.
-          const merged = { ...DEFAULT_DATA, ...remote };
+          // Validate remote data before merging to prevent prototype pollution
+          const validRemote = validateLoadedData(remote) || {};
+          const merged = { ...DEFAULT_DATA, ...validRemote };
 
           // Keep local selectedDate to not disrupt UI
           merged.selectedDate = local.selectedDate;
 
           // If local has a program start but remote doesn't, keep it.
-          if (local.programStart && !remote.programStart) {
+          if (local.programStart && !validRemote.programStart) {
             merged.programStart = local.programStart;
           }
 
           // Deep merge overrides and completedDays, assuming local is fresher
           // (A proper CRDT or versioned-field approach would be better long-term)
-          merged.overrides = { ...(remote.overrides || {}), ...(local.overrides || {}) };
-          merged.completedDays = { ...(remote.completedDays || {}), ...(local.completedDays || {}) };
+          merged.overrides = { ...(validRemote.overrides || {}), ...(local.overrides || {}) };
+          merged.completedDays = { ...(validRemote.completedDays || {}), ...(local.completedDays || {}) };
 
           setDataRaw(merged);
           writeLocal(merged);
@@ -102,7 +106,7 @@ export function useSyncedData(passphrase) {
         } else {
           // First time with this passphrase — push local data up
           setDataRaw(local);
-          saveToSupabase(passphrase, local)
+          saveToSupabaseWithHash(passphrase, local)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
@@ -133,7 +137,7 @@ export function useSyncedData(passphrase) {
       clearTimeout(debounceTimer.current);
       setSyncStatus('saving');
       debounceTimer.current = setTimeout(() => {
-        saveToSupabase(passphraseRef.current, finalState)
+        saveToSupabaseWithHash(passphraseRef.current, finalState)
           .then(() => setSyncStatus('synced'))
           .catch(() => setSyncStatus('offline'));
       }, DEBOUNCE_MS);

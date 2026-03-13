@@ -7,5 +7,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test-setup.js',
+    // Exclude plain Node.js test files (scheduler, streakCalc, prCalc)
+    // that use console.log/process.exit instead of describe/it
+    exclude: ['**/node_modules/**', 'src/lib/*.test.js'],
+    include: ['src/components/**/*.test.{js,jsx,ts,tsx}'],
   },
 })

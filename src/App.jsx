@@ -19,7 +19,7 @@ import PlanEditor from './components/PlanEditor';
 import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
-import { loadFromSupabase } from './lib/supabase';
+import { hashPassphrase, loadFromSupabaseWithHash } from './lib/supabase';
 import { applySmartGuard, todayStr, resolvedSession } from './lib/scheduler';
 import { SESSION_META } from './data/workouts';
 import { Toaster } from 'react-hot-toast';
@@ -137,9 +137,10 @@ export default function App() {
   }, [programStart, data]);
 
   const handleUnlock = async (phrase) => {
-    await loadFromSupabase(phrase);
-    localStorage.setItem(PASSPHRASE_KEY, phrase);
-    setPassphrase(phrase);
+    const hash = await hashPassphrase(phrase);
+    await loadFromSupabaseWithHash(hash);
+    localStorage.setItem(PASSPHRASE_KEY, hash);
+    setPassphrase(hash);
   };
 
   const handleSelectDay = (dateStr) => {
@@ -391,7 +392,7 @@ export default function App() {
         {activeTab === 'progress' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <Stats completedDays={completedDays} programStart={programStart} overrides={overrides} streakRestores={streakRestores} onRestoreDay={handleRestoreDay} />
-            <Progression programStart={programStart} />
+            <Progression programStart={programStart} completedDays={completedDays} overrides={overrides} />
           </div>
         )}
 

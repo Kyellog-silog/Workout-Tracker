@@ -22,7 +22,9 @@ const EMPTY_EXERCISE = {
 };
 
 function genId(prefix) {
-  return prefix + '_' + Math.random().toString(36).slice(2, 7);
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return prefix + '_' + hex;
 }
 
 function parseTextImport(text, sessionKey) {
@@ -159,11 +161,11 @@ function ExerciseFormRow({ ex, index, total, onChange, onDelete, onMoveUp, onMov
         {/* Bottom line: sets × reps + type — sits below name on its own row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, paddingLeft: 32 }}>
           <input type="text" value={ex.sets} onChange={e => onChange('sets', e.target.value)}
-            placeholder="3" title="Sets"
+            placeholder="3" title="Sets" maxLength={6}
             style={{ ...inputBase, width: 32, fontSize: 12, padding: '4px 5px', textAlign: 'center' }} />
           <span style={{ color: 'var(--muted-foreground)', fontSize: 11, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>×</span>
           <input type="text" value={ex.reps} onChange={e => onChange('reps', e.target.value)}
-            placeholder="8–12" title="Reps"
+            placeholder="8–12" title="Reps" maxLength={6}
             style={{ ...inputBase, width: 54, fontSize: 12, padding: '4px 5px', textAlign: 'center' }} />
           <select value={ex.type} onChange={e => onChange('type', e.target.value)} style={selectStyle}>
             {EXERCISE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -251,6 +253,16 @@ export default function PlanEditor({ customPlans, setCustomPlans }) {
   };
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return;
+    if (file.size > 500 * 1024) {
+      setImportError('File too large (max 500 KB). Paste the text directly instead.');
+      e.target.value = '';
+      return;
+    }
+    if (!file.type.startsWith('text/')) {
+      setImportError('Only plain text (.txt) files are accepted.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader(); reader.onload = (ev) => setImportText(ev.target.result);
     reader.readAsText(file); e.target.value = '';
   };
