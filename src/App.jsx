@@ -20,9 +20,10 @@ import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
 import { loadFromSupabase } from './lib/supabase';
-import { runMidnightCheck, todayStr, resolvedSession } from './lib/scheduler';
+import { applySmartGuard, todayStr, resolvedSession } from './lib/scheduler';
 import { SESSION_META } from './data/workouts';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 
 const TABS = [
   { id: 'today',    label: 'Today',    icon: 'zap' },
@@ -69,31 +70,16 @@ export default function App() {
     ...p, overrides: typeof fn === 'function' ? fn(p.overrides || {}) : fn,
   }));
 
-  // --- 🐞 DEBUG LOGGING ---
-  const logEvent = (event, details) => {
-    console.log(`[APP:${event}]`, {
-      ts: new Date().toISOString(),
-      ...details,
-    });
-  };
-  // --- END DEBUG LOGGING ---
-
   // Midnight check
   const runCheck = () => {
     if (!data.programStart) return;
-    console.log('[MIDNIGHT] Running check...');
-    const today = new Date().toISOString().split('T')[0];
-    const { overrides, events } = applySmartGuard(
+    const { overrides: newOv, events } = applySmartGuard(
       data.programStart,
       data.completedDays,
-      data.overrides
+      data.overrides,
+      todayStr()
     );
-    if (JSON.stringify(newOv) !== JSON.stringify(ov)) {
-      logEvent('midnight-check-update', {
-        oldOverrides: JSON.stringify(ov),
-        newOverrides: JSON.stringify(newOv),
-        events: events.map(e => e.type),
-      });
+    if (JSON.stringify(newOv) !== JSON.stringify(data.overrides)) {
       setData(p => ({ ...p, overrides: newOv }));
     }
     if (events.length > 0) setPendingAlertEvents(events);
@@ -119,8 +105,7 @@ export default function App() {
 
   useEffect(() => {
     if (syncStatus === 'synced' && programStart) {
-      logEvent('midnight-check-trigger', { cause: 'sync-status-change' });
-      runCheck(data);
+      runCheck();
     }
   }, [syncStatus]);
 
@@ -132,8 +117,7 @@ export default function App() {
       midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 30, 0);
       midnightTimer.current = setTimeout(() => {
-        logEvent('midnight-check-trigger', { cause: 'timer' });
-        runCheck(data);
+        runCheck();
         scheduleNext();
       }, midnight - now);
     };
@@ -340,7 +324,14 @@ export default function App() {
                       {Object.keys(overrides).filter(k => !k.startsWith('__')).length} adjustment{Object.keys(overrides).filter(k => !k.startsWith('__')).length > 1 ? 's' : ''} active
                     </span>
                     <button
-                      onClick={() => { if (confirm('Clear all schedule adjustments?')) setOverrides({}); }}
+                      onClick={() => {
+                        if (confirm('Clear all schedule adjustments?')) {
+                          setOverrides(prev => ({
+                            // Preserve the watermark so the scheduler doesn't re-evaluate historical dates
+                            ...(prev.__processedUpTo ? { __processedUpTo: prev.__processedUpTo } : {}),
+                          }));
+                        }
+                      }}
                       style={{
                         fontSize: 9, color: 'var(--primary)', background: 'none',
                         border: '1px solid var(--border)', borderRadius: 20,

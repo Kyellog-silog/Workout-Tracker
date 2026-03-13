@@ -36,7 +36,8 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
   const audioCtxRef = useRef(null);
 
   // Drag state — null means "use CSS right/bottom default", otherwise {x,y} = top-left
-  const [pos, setPos] = useState(null);
+  const [pos, setPos] = useState(null);           // FAB position when collapsed
+  const [panelPos, setPanelPos] = useState(null); // Panel position when expanded
   const dragRef = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0, moved: false });
   const elRef = useRef(null);
 
@@ -45,25 +46,41 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
   const vpW = () => document.documentElement.clientWidth;
   const vpH = () => document.documentElement.clientHeight;
 
+  /** Place the panel so it always opens toward the page center from the FAB. */
+  const computePanelPos = useCallback((fabPos) => {
+    const w = vpW(), h = vpH();
+    const fabX = fabPos ? fabPos.x : w - 16 - FAB_SIZE; // mirrors CSS right:16
+    const fabY = fabPos ? fabPos.y : h - 90 - FAB_SIZE; // mirrors CSS bottom:90
+    const cx = fabX + FAB_SIZE / 2;
+    const cy = fabY + FAB_SIZE / 2;
+    // FAB right of center → align panel's right edge with FAB's right (panel opens left)
+    const panelX = cx > w / 2 ? fabX + FAB_SIZE - PANEL_W : fabX;
+    // FAB below center → align panel's bottom edge with FAB's bottom (panel opens up)
+    const panelY = cy > h / 2 ? fabY + FAB_SIZE - PANEL_H : fabY;
+    return {
+      x: clamp(panelX, 8, w - PANEL_W - 8),
+      y: clamp(panelY, 8, h - PANEL_H - 8),
+    };
+  }, []);
+
   const onPointerDown = useCallback((e) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    // If we haven't dragged yet, compute current position from the element's rect
-    let startPos = pos;
-    if (!startPos && elRef.current) {
+    let currentPos = open ? panelPos : pos;
+    if (!currentPos && elRef.current) {
       const rect = elRef.current.getBoundingClientRect();
-      startPos = { x: rect.left, y: rect.top };
-      setPos(startPos);
+      currentPos = { x: rect.left, y: rect.top };
+      if (open) setPanelPos(currentPos); else setPos(currentPos);
     }
     dragRef.current = {
       active: true,
       startX: e.clientX,
       startY: e.clientY,
-      origX: startPos?.x ?? 0,
-      origY: startPos?.y ?? 0,
+      origX: currentPos?.x ?? 0,
+      origY: currentPos?.y ?? 0,
       moved: false,
     };
-  }, [pos]);
+  }, [pos, panelPos, open]);
 
   const onPointerMove = useCallback((e) => {
     const d = dragRef.current;
@@ -74,10 +91,11 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
     d.moved = true;
     const w = open ? PANEL_W : FAB_SIZE;
     const h = open ? PANEL_H : FAB_SIZE;
-    setPos({
+    const newPos = {
       x: clamp(d.origX + dx, 0, vpW() - w),
       y: clamp(d.origY + dy, 0, vpH() - h),
-    });
+    };
+    if (open) setPanelPos(newPos); else setPos(newPos);
   }, [open]);
 
   const onPointerUp = useCallback(() => {
@@ -111,7 +129,10 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
 
   // Auto-open when finished
   useEffect(() => {
-    if (finished) setOpen(true);
+    if (finished) {
+      setPanelPos(computePanelPos(pos));
+      setOpen(true);
+    }
   }, [finished]);
 
   const playBeep = () => {
@@ -187,7 +208,10 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
           onPointerUp={(e) => {
             const wasDrag = dragRef.current.moved;
             onPointerUp(e);
-            if (!wasDrag) setOpen(true);
+            if (!wasDrag) {
+              setPanelPos(computePanelPos(pos));
+              setOpen(true);
+            }
           }}
           aria-label="Open rest timer"
           className="rest-timer-fab"
@@ -228,7 +252,7 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
           className="rest-timer-panel"
           style={{
             position: 'fixed',
-            ...(pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 90 }),
+            ...(panelPos ? { left: panelPos.x, top: panelPos.y } : { right: 16, bottom: 90 }),
             zIndex: 150,
             width: PANEL_W,
             background: 'var(--surface)',

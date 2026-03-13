@@ -53,12 +53,14 @@ export function formatDate(str) {
 // ─── Completion & Status Helpers ──────────────────────────────────────────────
 
 /**
- * A day is considered "trained" for schedule-shifting purposes if ANY
- * exercise has been checked off. This prevents auto-shifts for partial workouts.
+ * A day is considered "trained" for schedule-shifting purposes if:
+ * - allDone is true (written at completion time, immune to plan edits), OR
+ * - any exercise has been checked off (partial workout).
  */
 function isTrained(date, completedDays) {
   const dayData = completedDays?.[date];
   if (!dayData) return false;
+  if (dayData.allDone) return true; // fast path — reliable even if plan IDs changed
   return Object.values(dayData.checked || {}).some(Boolean);
 }
 

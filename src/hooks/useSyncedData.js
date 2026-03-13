@@ -37,7 +37,10 @@ const DEFAULT_DATA = {
   programStart: null,
   completedDays: {},
   overrides: {},
-  selectedDate: new Date().toISOString().split('T')[0],
+  selectedDate: (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })(),
 };
 
 export function useSyncedData(passphrase) {
@@ -47,15 +50,6 @@ export function useSyncedData(passphrase) {
   const passphraseRef = useRef(passphrase);
   passphraseRef.current = passphrase;
 
-  // --- 🐞 DEBUG LOGGING ---
-  const logEvent = (event, details) => {
-    console.log(`[SYNC:${event}]`, {
-      ts: new Date().toISOString(),
-      ...details,
-    });
-  };
-  // --- END DEBUG LOGGING ---
-
   // Listen for changes from other tabs
   useEffect(() => {
     const handleStorageChange = (e) => {
@@ -63,11 +57,10 @@ export function useSyncedData(passphrase) {
         try {
           const newValue = JSON.parse(e.newValue);
           if (newValue) {
-            logEvent('storage-change-detected', { source: 'other-tab' });
             setDataRaw(newValue);
           }
-        } catch (err) {
-          logEvent('storage-change-error', { error: err.message });
+        } catch {
+          // ignore parse errors
         }
       }
     };
@@ -102,19 +95,12 @@ export function useSyncedData(passphrase) {
           merged.overrides = { ...(remote.overrides || {}), ...(local.overrides || {}) };
           merged.completedDays = { ...(remote.completedDays || {}), ...(local.completedDays || {}) };
 
-          logEvent('load-remote', {
-            source: 'supabase',
-            keys: Object.keys(remote),
-            finalDate: merged.selectedDate,
-          });
-
           setDataRaw(merged);
           writeLocal(merged);
           setSyncStatus('synced');
         } else {
           // First time with this passphrase — push local data up
           setDataRaw(local);
-          logEvent('load-local-initial', { source: 'local-first-sync' });
           saveToSupabase(passphrase, local)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
@@ -125,7 +111,6 @@ export function useSyncedData(passphrase) {
         const local = readLocal();
         if (local) {
           setDataRaw(local);
-          logEvent('load-local-offline', { source: 'local-fallback' });
         }
         setSyncStatus('offline');
       });
@@ -143,29 +128,13 @@ export function useSyncedData(passphrase) {
 
       writeLocal(finalState);
 
-      logEvent('write-local', {
-        keys: Object.keys(finalState),
-        overrides: JSON.stringify(finalState.overrides),
-        completed: Object.keys(finalState.completedDays || {}).length,
-      });
-
       // Debounce Supabase write
       clearTimeout(debounceTimer.current);
       setSyncStatus('saving');
       debounceTimer.current = setTimeout(() => {
-        logEvent('write-remote-start', {
-          source: 'debounced-save',
-          overrides: JSON.stringify(finalState.overrides),
-        });
         saveToSupabase(passphraseRef.current, finalState)
-          .then(() => {
-            setSyncStatus('synced');
-            logEvent('write-remote-success', { source: 'debounced-save' });
-          })
-          .catch(() => {
-            setSyncStatus('offline');
-            logEvent('write-remote-fail', { source: 'debounced-save' });
-          });
+          .then(() => setSyncStatus('synced'))
+          .catch(() => setSyncStatus('offline'));
       }, DEBOUNCE_MS);
 
       return finalState;

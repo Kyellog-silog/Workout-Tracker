@@ -400,8 +400,15 @@ test('[BUGFIX] Multiple separate misses are handled correctly', () => {
 
 console.log('\n8. SCHEDULE CONTINUITY AFTER GUARD');
 test('Sessions after guard resume in correct PPL order', () => {
-  // Simulate 2-week absence → guard may fire → check that sessions after are valid PPL
-  const today = addDays(START, 14);
+  // The default schedule has rest days every 3 workouts, capping consecutive missed
+  // workout runs at exactly 3 (= threshold), so the guard never fires with it.
+  // Use a dense schedule (6 workout days before rest) to force a run of 6 → guard fires.
+  const DENSE_SCHEDULE = ['push', 'pull', 'legs', 'push', 'pull', 'legs', 'rest'];
+  const originalSchedule = [...DEFAULT_SCHEDULE];
+  DEFAULT_SCHEDULE.length = 0;
+  Array.prototype.push.apply(DEFAULT_SCHEDULE, DENSE_SCHEDULE);
+
+  const today = addDays(START, 7); // days 0-5 are workout misses (6 > 3) → guard fires
   const completed = {};
   const { overrides } = applySmartGuard(START, completed, {}, today);
 
@@ -412,8 +419,12 @@ test('Sessions after guard resume in correct PPL order', () => {
   const sessionAfterResume = resolvedSession(addDays(resumeDate, 1), START, overrides);
 
   console.log(`    ℹ Guard reset, resuming from ${resumeDate} with session: ${sessionAtResume}`);
-  assert(DEFAULT_SCHEDULE.includes(sessionAtResume), 'Session at resume point is valid');
-  assert(DEFAULT_SCHEDULE.includes(sessionAfterResume), 'Session after resume point is valid');
+  assert(['push', 'pull', 'legs', 'rest'].includes(sessionAtResume), 'Session at resume point is valid');
+  assert(['push', 'pull', 'legs', 'rest'].includes(sessionAfterResume), 'Session after resume point is valid');
+
+  // Restore original schedule
+  DEFAULT_SCHEDULE.length = 0;
+  Array.prototype.push.apply(DEFAULT_SCHEDULE, originalSchedule);
 });
 
 
