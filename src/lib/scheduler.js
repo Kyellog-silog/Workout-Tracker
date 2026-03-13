@@ -26,28 +26,50 @@ export const MAX_CONSECUTIVE_MISSES = 3;
 // ─── Date utilities ───────────────────────────────────────────────────────────
 
 export function todayStr() {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function addDays(str, n) {
-  const d = new Date(str + 'T12:00:00');
+  const d = new Date(str);
   d.setDate(d.getDate() + n);
   return d.toISOString().split('T')[0];
 }
 
 export function diffDays(a, b) {
-  const da = new Date(a + 'T12:00:00');
-  const db = new Date(b + 'T12:00:00');
+  const da = new Date(a);
+  const db = new Date(b);
   return Math.round((db - da) / 86400000);
 }
 
 export function isBefore(a, b) { return diffDays(a, b) > 0; }
 
 export function formatDate(str) {
-  return new Date(str + 'T12:00:00').toLocaleDateString('en-US', {
+  return new Date(str).toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric'
   });
 }
+
+// ─── Completion & Status Helpers ──────────────────────────────────────────────
+
+/**
+ * A day is considered "trained" for schedule-shifting purposes if ANY
+ * exercise has been checked off. This prevents auto-shifts for partial workouts.
+ */
+function isTrained(date, completedDays) {
+  const dayData = completedDays?.[date];
+  if (!dayData) return false;
+  return Object.values(dayData.checked || {}).some(Boolean);
+}
+
+/**
+ * A day is "fully complete" for stats-counting purposes only if all
+ * exercises for that session were checked off.
+ */
+export function isAllDone(date, completedDays) {
+  return completedDays?.[date]?.allDone || false;
+}
+
 
 // ─── Base schedule (no overrides) ────────────────────────────────────────────
 
@@ -99,25 +121,18 @@ export function resolvedSession(date, programStart, overrides) {
 export function getUnresolvedMisses(programStart, completedDays, overrides, scanUntil) {
   if (!programStart) return [];
   const ov = overrides || {};
-
-  // Start scanning from the day AFTER processedUpTo (already handled)
-  // or from programStart if no watermark
   const scanFrom = ov.__processedUpTo ? addDays(ov.__processedUpTo, 1) : programStart;
-
-  // Don't scan dates before program start
   const effectiveFrom = isBefore(programStart, scanFrom) ? scanFrom : programStart;
 
   const missed = [];
   let cursor = effectiveFrom;
-
   while (isBefore(cursor, scanUntil)) {
     const session = resolvedSession(cursor, programStart, ov);
     const isWorkout = session && session !== 'rest' && session !== 'missed';
-    const isDone = completedDays[cursor]?.allDone;
-    // Already has any override (rest/missed/specific session override)
-    const hasOverride = ov[cursor] !== undefined;
+    const hasActivity = isTrained(cursor, completedDays);
+    const hasOverride = Object.prototype.hasOwnProperty.call(ov, cursor);
 
-    if (isWorkout && !isDone && !hasOverride) {
+    if (isWorkout && !hasActivity && !hasOverride) {
       missed.push(cursor);
     }
     cursor = addDays(cursor, 1);
@@ -145,68 +160,48 @@ export function applySmartGuard(programStart, completedDays, currentOverrides, t
   }
 
   const newOverrides = { ...ov };
+  if (!newOverrides.__shifts) newOverrides.__shifts = [];
   const events = [];
 
-  // Group consecutive missed WORKOUT days into runs
-  const runs = groupIntoRuns(misses);
+  // Group consecutive missed days into "runs" only if there are misses.
+  const runs = [];
+  if (misses.length > 0) {
+    let currentRun = [misses[0]];
+    for (let i = 1; i < misses.length; i++) {
+      if (diffDays(misses[i - 1], misses[i]) === 1) {
+        currentRun.push(misses[i]);
+      } else {
+        runs.push(currentRun);
+        currentRun = [misses[i]];
+      }
+    }
+    runs.push(currentRun);
+  }
 
   for (const run of runs) {
     const runLen = run.length;
+    const lastDayOfRun = run[run.length - 1];
 
-    if (runLen <= MAX_CONSECUTIVE_MISSES) {
-      // SHIFT MODE: mark each as rest, shift future sessions forward
-      for (const d of run) {
-        newOverrides[d] = 'rest';
+    if (runLen > MAX_CONSECUTIVE_MISSES) {
+      // GUARD MODE: Too many misses, pause the schedule
+      for (const d of run) newOverrides[d] = 'missed';
+      const resumeFrom = addDays(lastDayOfRun, 1);
+      // This is the fix: Only update resumeFrom if it's later than any existing one.
+      if (!newOverrides.__resumeFrom || isBefore(newOverrides.__resumeFrom, resumeFrom)) {
+        newOverrides.__resumeFrom = resumeFrom;
       }
-      const shiftFrom = addDays(run[run.length - 1], 1);
-      if (!newOverrides.__shifts) newOverrides.__shifts = [];
-      newOverrides.__shifts = [...newOverrides.__shifts, { from: shiftFrom, by: runLen }];
-      events.push({
-        type: 'shift',
-        dates: run,
-        shiftBy: runLen,
-        message: `${runLen} missed session${runLen > 1 ? 's' : ''} — schedule shifted forward by ${runLen} day${runLen > 1 ? 's' : ''}.`,
-      });
+      events.push({ type: 'guard', dates: run, resumeFrom });
     } else {
-      // GUARD MODE: long absence — mark all missed, do NOT shift
-      for (const d of run) {
-        newOverrides[d] = 'missed';
-      }
-      const resumeFrom = addDays(run[run.length - 1], 1);
-      // Guard overrides any previous resumeFrom (latest one wins)
-      newOverrides.__resumeFrom = resumeFrom;
-      // Clear shift debt that accumulated during this guard period
-      // (shifts that start within the guard range are now irrelevant)
-      events.push({
-        type: 'guard',
-        dates: run,
-        resumeFrom,
-        message: `${runLen} consecutive missed days — smart guard activated. Your schedule resumes fresh from ${formatDate(resumeFrom)} without any shift. No spiral.`,
-      });
+      // SHIFT MODE: 1-3 misses, shift the schedule
+      for (const d of run) newOverrides[d] = 'rest';
+      const shiftFrom = addDays(lastDayOfRun, 1);
+      newOverrides.__shifts.push({ from: shiftFrom, by: runLen });
+      events.push({ type: 'shift', dates: run, shiftBy: runLen });
     }
   }
 
-  // Advance watermark to yesterday (all days before today are now processed)
   newOverrides.__processedUpTo = addDays(today, -1);
-
   return { overrides: newOverrides, events };
-}
-
-function groupIntoRuns(dates) {
-  if (dates.length === 0) return [];
-  const runs = [];
-  let run = [dates[0]];
-  for (let i = 1; i < dates.length; i++) {
-    // Consecutive = exactly 1 calendar day apart
-    if (diffDays(dates[i - 1], dates[i]) === 1) {
-      run.push(dates[i]);
-    } else {
-      runs.push(run);
-      run = [dates[i]];
-    }
-  }
-  runs.push(run);
-  return runs;
 }
 
 // ─── Manual override actions ──────────────────────────────────────────────────

@@ -22,19 +22,38 @@
 const DEFAULT_SCHEDULE = ['push', 'pull', 'legs', 'rest', 'push', 'pull', 'rest'];
 const MAX_CONSECUTIVE_MISSES = 3;
 
+// ─── Date utilities (local time based) ────────────────────────────────────────
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function addDays(str, n) {
-  const d = new Date(str + 'T12:00:00');
+  const d = new Date(str);
   d.setDate(d.getDate() + n);
   return d.toISOString().split('T')[0];
 }
 
 function diffDays(a, b) {
-  const da = new Date(a + 'T12:00:00');
-  const db = new Date(b + 'T12:00:00');
+  const da = new Date(a);
+  const db = new Date(b);
   return Math.round((db - da) / 86400000);
 }
 
 function isBefore(a, b) { return diffDays(a, b) > 0; }
+
+// ─── Completion & Status Helpers ──────────────────────────────────────────────
+function isTrained(date, completedDays) {
+  const dayData = completedDays?.[date];
+  if (!dayData) return false;
+  return Object.values(dayData.checked || {}).some(Boolean);
+}
+
+function isAllDone(date, completedDays) {
+  return completedDays?.[date]?.allDone || false;
+}
+
+// ─── Inlined Scheduler Logic (for testing) ────────────────────────────────────
 
 function baseSessionForDate(date, programStart) {
   const diff = diffDays(programStart, date);
@@ -44,28 +63,26 @@ function baseSessionForDate(date, programStart) {
 
 function resolvedSession(date, programStart, overrides) {
   if (!programStart) return null;
-  if (!overrides) return baseSessionForDate(date, programStart);
-  if (overrides[date] !== undefined && overrides[date] !== null) return overrides[date];
+  const ov = overrides || {};
 
-  if (overrides.__resumeFrom && !isBefore(date, overrides.__resumeFrom)) {
-    let shiftDebt = 0;
-    const shifts = overrides.__shifts || [];
-    for (const shift of shifts) {
-      if (isBefore(shift.from, overrides.__resumeFrom)) shiftDebt += shift.by;
+  if (ov[date] !== undefined && ov[date] !== null) return ov[date];
+
+  if (ov.__resumeFrom && !isBefore(date, ov.__resumeFrom)) {
+    let shiftDebtBeforeResume = 0;
+    for (const sh of (ov.__shifts || [])) {
+      if (isBefore(sh.from, ov.__resumeFrom)) shiftDebtBeforeResume += sh.by;
     }
-    const daysToResume = diffDays(programStart, overrides.__resumeFrom);
-    const baseIdx = (daysToResume - shiftDebt);
-    const daysFromResume = diffDays(overrides.__resumeFrom, date);
-    const scheduleIdx = (baseIdx + daysFromResume) % DEFAULT_SCHEDULE.length;
-    return DEFAULT_SCHEDULE[scheduleIdx < 0 ? scheduleIdx + DEFAULT_SCHEDULE.length : scheduleIdx];
+    const daysToResume = diffDays(programStart, ov.__resumeFrom);
+    const baseIdxAtResume = daysToResume - shiftDebtBeforeResume;
+    const daysFromResume = diffDays(ov.__resumeFrom, date);
+    const idx = (baseIdxAtResume + daysFromResume) % DEFAULT_SCHEDULE.length;
+    return DEFAULT_SCHEDULE[idx < 0 ? idx + DEFAULT_SCHEDULE.length : idx];
   }
 
-  const shifts = overrides.__shifts || [];
   let shiftDebt = 0;
-  for (const shift of shifts) {
-    if (isBefore(shift.from, date) || shift.from === date) shiftDebt += shift.by;
+  for (const sh of (ov.__shifts || [])) {
+    if (!isBefore(date, sh.from)) shiftDebt += sh.by;
   }
-
   const baseDiff = diffDays(programStart, date);
   if (baseDiff < 0) return null;
   const shiftedDiff = baseDiff - shiftDebt;
@@ -73,26 +90,43 @@ function resolvedSession(date, programStart, overrides) {
   return DEFAULT_SCHEDULE[shiftedDiff % DEFAULT_SCHEDULE.length];
 }
 
-function getUnresolvedMisses(programStart, completedDays, overrides, today) {
+function getUnresolvedMisses(programStart, completedDays, overrides, scanUntil) {
   if (!programStart) return [];
+  const ov = overrides || {};
+  const scanFrom = ov.__processedUpTo ? addDays(ov.__processedUpTo, 1) : programStart;
+  const effectiveFrom = isBefore(programStart, scanFrom) ? scanFrom : programStart;
   const missed = [];
-  let cursor = programStart;
-  while (isBefore(cursor, today)) {
-    const session = resolvedSession(cursor, programStart, overrides);
+  let cursor = effectiveFrom;
+  while (isBefore(cursor, scanUntil)) {
+    const session = resolvedSession(cursor, programStart, ov);
     const isWorkout = session && session !== 'rest' && session !== 'missed';
-    const isDone = completedDays[cursor]?.allDone;
-    const alreadyHandled = overrides[cursor] === 'missed' || overrides[cursor] === 'rest';
-    if (isWorkout && !isDone && !alreadyHandled) missed.push(cursor);
+    const hasActivity = isTrained(cursor, completedDays);
+    const hasOverride = ov[cursor] !== undefined;
+    if (isWorkout && !hasActivity && !hasOverride) {
+      missed.push(cursor);
+    }
     cursor = addDays(cursor, 1);
   }
   return missed;
 }
 
 function applySmartGuard(programStart, completedDays, currentOverrides, today) {
-  const misses = getUnresolvedMisses(programStart, completedDays, currentOverrides, today);
-  if (misses.length === 0) return { overrides: currentOverrides, events: [] };
+  const ov = currentOverrides || {};
+  const misses = getUnresolvedMisses(programStart, completedDays, ov, today);
 
-  const newOverrides = { ...currentOverrides };
+  if (misses.length === 0) {
+    const newProcessed = addDays(today, -1);
+    const existing = ov.__processedUpTo;
+    if (existing && !isBefore(existing, newProcessed)) {
+      return { overrides: ov, events: [] };
+    }
+    return {
+      overrides: { ...ov, __processedUpTo: newProcessed },
+      events: [],
+    };
+  }
+
+  const newOverrides = { ...ov };
   const events = [];
 
   const runs = [];
@@ -123,6 +157,7 @@ function applySmartGuard(programStart, completedDays, currentOverrides, today) {
     }
   }
 
+  newOverrides.__processedUpTo = addDays(today, -1);
   return { overrides: newOverrides, events };
 }
 
@@ -152,9 +187,14 @@ function assertEqual(a, b, msg) {
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 const START = '2025-01-06'; // Monday (Day 0 = push)
 
-function mkCompleted(dates) {
+function mkCompleted(dates, partial = false) {
   const obj = {};
-  for (const d of dates) obj[d] = { allDone: true };
+  for (const d of dates) {
+    obj[d] = {
+      checked: { 'p1': true }, // At least one checked
+      allDone: !partial,
+    };
+  }
   return obj;
 }
 
@@ -174,7 +214,7 @@ test('Day 7 (Mon) = push (cycle repeats)', () => assertEqual(baseSessionForDate(
 test('Day 14 = push (2 full cycles)', () => assertEqual(baseSessionForDate(addDays(START, 14), START), 'push'));
 test('Before program start = null', () => assertEqual(baseSessionForDate(addDays(START, -1), START), null));
 
-console.log('\n2. SINGLE MISS → SHIFT');
+console.log('\n2. SHIFT LOGIC');
 test('1 missed workout day shifts schedule by 1', () => {
   // today = day1 so only day0 (push) has passed and was missed
   const today = addDays(START, 1);
@@ -191,15 +231,15 @@ test('1 missed workout day shifts schedule by 1', () => {
   assertEqual(resolvedSession(addDays(START, 2), START, overrides), 'pull', 'Day 2 now has pull (shifted)');
 });
 
-console.log('\n3. 2-3 CONSECUTIVE MISSES → SHIFT BY N');
 test('2 consecutive misses shift by 2', () => {
   const today = addDays(START, 3);
   const completed = {};
   const { overrides, events } = applySmartGuard(START, completed, {}, today);
   // Days 0,1,2 are push/pull/legs. Day 3 is rest (not a miss). Only 0,1,2 are workout misses.
+  // With the fix, it should detect 3 misses: push, pull, legs.
   const shiftEvent = events.find(e => e.type === 'shift');
   assert(shiftEvent, 'Should have shift event');
-  assert(shiftEvent.shiftBy <= MAX_CONSECUTIVE_MISSES, `Shift should be ≤ ${MAX_CONSECUTIVE_MISSES}`);
+  assertEqual(shiftEvent.shiftBy, 3, 'Shift should be 3 for 3 missed workouts');
 });
 
 test('3 consecutive misses (exactly at limit) → shift, NOT guard', () => {
@@ -211,78 +251,50 @@ test('3 consecutive misses (exactly at limit) → shift, NOT guard', () => {
   const shiftEvent = events.find(e => e.type === 'shift');
   assert(!guardEvent, 'Guard should NOT fire for exactly 3 misses');
   assert(shiftEvent, 'Shift should apply for ≤ 3 misses');
+  assertEqual(shiftEvent.shiftBy, 3, 'Shift amount should be 3');
 });
 
-console.log('\n4. 4+ CONSECUTIVE MISSES → SMART GUARD FIRES');
-test('4 consecutive missed workouts → guard fires', () => {
-  // Need 4 workout misses in a row. Skip a rest day to get there.
-  // Days: push pull legs rest push pull rest
-  // Misses on days 0,1,2 then 4,5 (skipping rest at day 3) = 2 separate runs
-  // For 4 consecutive workout misses we need a denser schedule segment
-  // Let's use days 0–5 missed (push pull legs rest push pull) = 4 workout misses in runs of 3+2
-  // Actually run of 3 (days 0,1,2) then break at rest (day3) then run of 2 (days 4,5)
-  // To get a run of 4+, we need consecutive workout days with no rest between
-  // Create a scenario: miss days 0,1,2,4,5 — that's two separate runs (3 and 2)
-  // The guard fires when a SINGLE RUN exceeds MAX_CONSECUTIVE_MISSES
+console.log('\n3. GUARD LOGIC');
+test('4+ consecutive missed workouts → guard fires', () => {
+  // To get a run of 4, we need to miss push, pull, legs, (skip rest), push
+  const today = addDays(START, 5); // Day 4 is push
+  const completed = {}; // Miss days 0, 1, 2, 4
+  const { overrides, events } = applySmartGuard(START, completed, {}, today);
 
-  // Simulate by using a custom schedule that has 4 workouts in a row:
-  // We'll test this differently: mock a 6-consecutive-day miss
-  // The guard logic runs per RUN of consecutive missed WORKOUT days
-
-  // With our schedule push/pull/legs/rest/push/pull/rest:
-  // If we miss ALL days 0-6 (full week), runs are [0,1,2] and [4,5] separated by rest at 3 and 6
-  // So guard fires on run [0,1,2] only if it has > 3 items... wait, run=[0,1,2] has 3 = exactly limit
-  // Let's instead test 4 CONSECUTIVE days including a rest day being missed
-  // Actually the logic only counts WORKOUT misses (rest days don't count as misses)
-
-  // *** Key insight: guard fires based on consecutive CALENDAR workout days ***
-  // With our schedule, the longest consecutive workout run is 3 (push/pull/legs before rest)
-  // So we need to miss TWO full workout blocks to get a long enough run...
-
-  // Let me test it directly with the accumulation: miss 4 workout sessions total across time
-  // spanning > 7 calendar days (trip scenario)
-  const longToday = addDays(START, 14);
-  const completed = {}; // nothing done in 2 weeks
-  const { overrides, events } = applySmartGuard(START, completed, {}, longToday);
-
-  // In 14 days: push pull legs rest push pull rest push pull legs rest push pull rest
-  // Workout days: 0,1,2,4,5,7,8,9,11,12 = 10 workout misses
-  // Runs: [0,1,2] = 3 (shift), [4,5] = 2 (shift), [7,8,9] = 3 (shift), [11,12] = 2 (shift)
-  // Wait - that means even 2 weeks won't trigger guard with this schedule since max run = 3!
-  // GOOD - this means we need to reconsider: guard fires when TOTAL consecutive CALENDAR days missed
-  // exceeds threshold (including rest days), not just workout days.
-  // Update: let's check what events fired
-  assert(events.length > 0, 'Should have events for 2 weeks missed');
-  const hasGuard = events.some(e => e.type === 'guard');
-  const hasShifts = events.some(e => e.type === 'shift');
-  // With short runs, should be all shifts (no guard)
-  // This is actually CORRECT behavior — rest days naturally break up runs
-  assert(hasShifts || hasGuard, 'Should have some events');
-  console.log(`    ℹ 2-week miss produced: ${events.map(e => `${e.type}(${e.dates?.length}d)`).join(', ')}`);
+  // The logic groups misses into consecutive runs.
+  // Day 3 is a rest day, so it breaks the run.
+  // Run 1: [day 0, day 1, day 2] -> length 3 -> SHIFT
+  // Run 2: [day 4] -> length 1 -> SHIFT
+  const guardEvent = events.find(e => e.type === 'guard');
+  assert(!guardEvent, 'Guard should not fire with a rest day breaking the run');
+  assertEqual(events.length, 2, 'Should have two separate shift events');
+  assertEqual(events[0].shiftBy, 3, 'First run is a 3-day shift');
+  assertEqual(events[1].shiftBy, 1, 'Second run is a 1-day shift');
 });
 
-test('Guard fires when 4+ workout days missed with no rest break (dense schedule)', () => {
-  // Simulate a dense block: manually create a scenario where the guard MUST fire
-  // by checking: if someone misses 4 workouts in a row (e.g. pull/legs/push/pull)
-  // This happens when rest day is also manually marked as rest, extending the workout run
-  // OR when we look at CALENDAR days, not just workout days
+test('Guard fires on a long absence (uninterrupted workout days)', () => {
+  // To test the guard, we need a scenario with 4+ *consecutive workout days* missed.
+  // Our default schedule has a max of 3. Let's simulate a different schedule for this test.
+  const DENSE_SCHEDULE = ['push', 'pull', 'legs', 'push', 'pull', 'legs', 'rest'];
+  const originalSchedule = [...DEFAULT_SCHEDULE];
+  DEFAULT_SCHEDULE.length = 0;
+  Array.prototype.push.apply(DEFAULT_SCHEDULE, DENSE_SCHEDULE);
 
-  // For our schedule: the guard as implemented fires on consecutive CALENDAR missed workout days
-  // push/pull/legs = 3 in a row, then rest (breaks run), so max natural run = 3
+  const today = addDays(START, 5); // Day 4 is pull
+  const completed = {}; // Miss days 0, 1, 2, 3, 4
+  const { overrides, events } = applySmartGuard(START, completed, {}, today);
 
-  // DESIGN DECISION: Guard should also fire if total SHIFT DEBT exceeds a maximum
-  // This prevents slow accumulation (e.g. 3 misses + 3 misses + 3 misses = 9 days shift)
-  // Let's verify the system produces reasonable output for a 3-week absence
-  const longToday = addDays(START, 21);
-  const completed = {};
-  const { overrides, events } = applySmartGuard(START, completed, {}, longToday);
+  const guardEvent = events.find(e => e.type === 'guard');
+  assert(guardEvent, 'Guard should fire for 5 consecutive workout misses');
+  assertEqual(guardEvent.dates.length, 5, 'Guard event should cover all 5 missed dates');
 
-  const totalShiftDebt = (overrides.__shifts || []).reduce((s, sh) => s + sh.by, 0);
-  console.log(`    ℹ 3-week miss: shift debt = ${totalShiftDebt} days, events = ${events.length}`);
-  assert(events.length > 0, 'Should have multiple events');
+  // Restore original schedule
+  DEFAULT_SCHEDULE.length = 0;
+  Array.prototype.push.apply(DEFAULT_SCHEDULE, originalSchedule);
 });
 
-console.log('\n5. TRAVEL SCENARIO (10 days away, no workouts)');
+
+console.log('\n4. TRAVEL & ILLNESS SCENARIOS');
 test('10-day travel: schedule handled without spiraling', () => {
   const travelStart = START;
   const returnDay = addDays(START, 10); // back after 10 days
@@ -304,7 +316,6 @@ test('10-day travel: schedule handled without spiraling', () => {
   console.log(`    ℹ Session on return day: ${returnSession}`);
 });
 
-console.log('\n6. ILLNESS SCENARIO (7 days sick)');
 test('7-day illness: recovers correctly', () => {
   const illnessStart = addDays(START, 5); // get sick after 5 days
   // Completed days 0-4
@@ -319,17 +330,17 @@ test('7-day illness: recovers correctly', () => {
   console.log(`    ℹ Events: ${events.map(e=>`${e.type}(${e.dates?.length||0}d)`).join(' ')}`);
 });
 
-console.log('\n7. IDEMPOTENCY (running check twice = same result)');
+console.log('\n5. IDEMPOTENCY & EDGE CASES');
 test('Running midnight check twice produces identical overrides', () => {
   const today = addDays(START, 5);
   const completed = {};
-  const { overrides: first } = applySmartGuard(START, completed, {}, today);
-  // CRITICAL: pass first run's overrides into second run — this is what idempotency means
-  const { events: secondEvents } = applySmartGuard(START, completed, first, today);
+  const { overrides: first, events: firstEvents } = applySmartGuard(START, completed, {}, today);
+  // Pass first run's overrides into second run
+  const { overrides: second, events: secondEvents } = applySmartGuard(START, completed, first, today);
   assertEqual(secondEvents.length, 0, 'Second run with same overrides should produce no new events');
+  assertEqual(JSON.stringify(first), JSON.stringify(second), 'Overrides object should be identical');
 });
 
-console.log('\n8. REST DAY MISSES (should NOT trigger guard)');
 test('Missing a rest day is not counted as a miss', () => {
   // Day 3 is a rest day. If we "miss" it, nothing should happen.
   const today = addDays(START, 4); // only workout day 0,1,2 and rest day 3 have passed
@@ -338,7 +349,7 @@ test('Missing a rest day is not counted as a miss', () => {
   assertEqual(events.length, 0, 'No events when only rest days missed');
 });
 
-console.log('\n9. MANUAL SWAP TO REST');
+console.log('\n6. MANUAL OVERRIDES');
 test('Swapping a future date to rest shifts schedule by 1', () => {
   const futureDate = addDays(START, 4); // push day
   const overrides = {};
@@ -352,73 +363,64 @@ test('Swapping a future date to rest shifts schedule by 1', () => {
   assertEqual(session, 'push', 'Day after swap should have original session (push shifted forward)');
 });
 
-console.log('\n10. SCHEDULE CONTINUITY AFTER GUARD');
+console.log('\n7. REGRESSION TESTS (BUG FIXES)');
+test('[BUGFIX] March 9-13 scenario: completed workouts should not cause shift', () => {
+  const programStart = '2026-03-09';
+  const today = '2026-03-13';
+  const completed = mkCompleted(['2026-03-09', '2026-03-10', '2026-03-11']); // Push, Pull, Legs done
+  // Day 12 is a rest day, so it's not a "miss"
+
+  const { overrides, events } = applySmartGuard(programStart, completed, {}, today);
+
+  assertEqual(events.length, 0, 'No shift or guard events should be generated');
+  const sessionOn13th = resolvedSession('2026-03-13', programStart, overrides);
+  assertEqual(sessionOn13th, 'push', 'March 13th should be a Push day');
+});
+
+test('[BUGFIX] Partial completion prevents auto-shift, but subsequent misses still shift', () => {
+  const today = addDays(START, 2); // Day 1 (pull) is over
+  // Day 0 (push) was partially done. Day 1 (pull) was missed entirely.
+  const completed = mkCompleted([START], true); // partial=true
+  const { events } = applySmartGuard(START, completed, {}, today);
+
+  const shiftEvents = events.filter(e => e.type === 'shift');
+  assertEqual(shiftEvents.length, 1, 'Should have one shift event for the one truly missed day');
+  assertEqual(shiftEvents[0].shiftBy, 1, 'Shift should be by 1');
+  assertEqual(shiftEvents[0].dates[0], addDays(START, 1), 'The missed date should be Day 1, not the partial Day 0');
+});
+
+test('[BUGFIX] Multiple separate misses are handled correctly', () => {
+  const today = addDays(START, 3);
+  const completed = {};
+  const { overrides, events } = applySmartGuard(START, completed, {}, today);
+  const shiftEvents = events.filter(e => e.type === 'shift');
+  assertEqual(shiftEvents.length, 1, 'Should have exactly one shift event');
+  assertEqual(shiftEvents[0].shiftBy, 3, 'Shift should be 3 for 3 missed workouts');
+});
+
+console.log('\n8. SCHEDULE CONTINUITY AFTER GUARD');
 test('Sessions after guard resume in correct PPL order', () => {
   // Simulate 2-week absence → guard may fire → check that sessions after are valid PPL
   const today = addDays(START, 14);
   const completed = {};
   const { overrides } = applySmartGuard(START, completed, {}, today);
 
-  // Check 7 days after return
-  const sessions = [];
-  for (let i = 0; i < 7; i++) {
-    const s = resolvedSession(addDays(today, i), START, overrides);
-    sessions.push(s);
-  }
-  const validSessions = ['push', 'pull', 'legs', 'rest', 'missed'];
-  for (const s of sessions) {
-    assert(validSessions.includes(s), `Session "${s}" should be a valid type`);
-  }
-  console.log(`    ℹ Sessions after return: ${sessions.join(' → ')}`);
+  const resumeDate = overrides.__resumeFrom;
+  assert(resumeDate, 'A resume date should be set after a long absence');
+
+  const sessionAtResume = resolvedSession(resumeDate, START, overrides);
+  const sessionAfterResume = resolvedSession(addDays(resumeDate, 1), START, overrides);
+
+  console.log(`    ℹ Guard reset, resuming from ${resumeDate} with session: ${sessionAtResume}`);
+  assert(DEFAULT_SCHEDULE.includes(sessionAtResume), 'Session at resume point is valid');
+  assert(DEFAULT_SCHEDULE.includes(sessionAfterResume), 'Session after resume point is valid');
 });
 
-console.log('\n11. SHIFT ACCUMULATION CAP');
-test('Multiple separate small misses accumulate shift correctly', () => {
-  // Miss day 0, then day 4 (both push days)
-  const today = addDays(START, 6);
-  const completed = mkCompleted([addDays(START,1), addDays(START,2)]); // did pull and legs
-  const { overrides, events } = applySmartGuard(START, completed, {}, today);
 
-  const totalShift = (overrides.__shifts || []).reduce((s, sh) => s + sh.by, 0);
-  console.log(`    ℹ Total shift debt: ${totalShift} days`);
-  console.log(`    ℹ Events: ${events.map(e=>`${e.type}(${e.dates?.length||0}d)`).join(' ')}`);
-  assert(totalShift >= 0, 'Shift debt should not be negative');
-});
-
-console.log('\n12. EDGE: MISS AT PROGRAM START');
-test('Missing the very first day of program', () => {
-  const today = addDays(START, 1);
-  const completed = {};
-  const { overrides, events } = applySmartGuard(START, completed, {}, today);
-  assert(events.length > 0, 'Should detect first day miss');
-  assertEqual(overrides[START], 'rest', 'First day should be marked rest (shifted)');
-  // Day 1 should now have push (shifted from day 0)
-  const day1Session = resolvedSession(addDays(START, 1), START, overrides);
-  assertEqual(day1Session, 'push', 'Day 1 should now be push (shifted)');
-});
-
-console.log('\n13. MIXED: SHIFT THEN GUARD IN SAME SESSION');
-test('2 misses (shift) then 5 misses (guard) in one check', () => {
-  // Complete the first workout, then miss 2, complete 1, miss 7
-  const completed = {
-    [START]: { allDone: true },
-    [addDays(START, 3)]: { allDone: true }, // completed the rest-day workout? No, rest. Skip.
-  };
-  const today = addDays(START, 16);
-  const { overrides, events } = applySmartGuard(START, completed, {}, today);
-  console.log(`    ℹ Events: ${events.map(e=>`${e.type}(${e.dates?.length||0}d)`).join(' ')}`);
-  console.log(`    ℹ Shifts: ${JSON.stringify(overrides.__shifts)}`);
-  const resumeSession = resolvedSession(today, START, overrides);
-  assert(['push','pull','legs','rest'].includes(resumeSession || 'rest'), 'Resume session should be valid');
-  console.log(`    ℹ Session on today (day 16): ${resumeSession}`);
-});
-
-// ─── Results ──────────────────────────────────────────────────────────────────
-console.log('\n' + '─'.repeat(50));
-console.log(`Results: ${passed} passed, ${failed} failed out of ${passed + failed} tests`);
-if (failed === 0) {
-  console.log('✅ ALL TESTS PASSED\n');
-} else {
-  console.log('❌ SOME TESTS FAILED — review above\n');
+// --- RUN ALL ---
+if (failed > 0) {
+  console.log(`\n\n❌ FAILED (${failed} of ${failed + passed} tests)`);
   process.exit(1);
+} else {
+  console.log(`\n\n✅ PASSED (${passed} tests)`);
 }

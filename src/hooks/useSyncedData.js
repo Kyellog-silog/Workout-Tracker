@@ -47,6 +47,34 @@ export function useSyncedData(passphrase) {
   const passphraseRef = useRef(passphrase);
   passphraseRef.current = passphrase;
 
+  // --- 🐞 DEBUG LOGGING ---
+  const logEvent = (event, details) => {
+    console.log(`[SYNC:${event}]`, {
+      ts: new Date().toISOString(),
+      ...details,
+    });
+  };
+  // --- END DEBUG LOGGING ---
+
+  // Listen for changes from other tabs
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === LOCAL_KEY) {
+        try {
+          const newValue = JSON.parse(e.newValue);
+          if (newValue) {
+            logEvent('storage-change-detected', { source: 'other-tab' });
+            setDataRaw(newValue);
+          }
+        } catch (err) {
+          logEvent('storage-change-error', { error: err.message });
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Initial load: fetch from Supabase, fall back to localStorage
   useEffect(() => {
     if (!passphrase) return;
@@ -54,20 +82,40 @@ export function useSyncedData(passphrase) {
 
     loadFromSupabase(passphrase)
       .then(remote => {
+        const local = readLocal() || DEFAULT_DATA;
+
         if (remote) {
-          // Merge: remote wins, but keep local selectedDate
-          const local = readLocal();
+          // --- SAFE MERGE LOGIC ---
+          // Base is remote. Apply local changes if they are newer.
           const merged = { ...DEFAULT_DATA, ...remote };
-          if (local?.selectedDate) merged.selectedDate = local.selectedDate;
+
+          // Keep local selectedDate to not disrupt UI
+          merged.selectedDate = local.selectedDate;
+
+          // If local has a program start but remote doesn't, keep it.
+          if (local.programStart && !remote.programStart) {
+            merged.programStart = local.programStart;
+          }
+
+          // Deep merge overrides and completedDays, assuming local is fresher
+          // (A proper CRDT or versioned-field approach would be better long-term)
+          merged.overrides = { ...(remote.overrides || {}), ...(local.overrides || {}) };
+          merged.completedDays = { ...(remote.completedDays || {}), ...(local.completedDays || {}) };
+
+          logEvent('load-remote', {
+            source: 'supabase',
+            keys: Object.keys(remote),
+            finalDate: merged.selectedDate,
+          });
+
           setDataRaw(merged);
           writeLocal(merged);
           setSyncStatus('synced');
         } else {
           // First time with this passphrase — push local data up
-          const local = readLocal();
-          const initial = local || DEFAULT_DATA;
-          setDataRaw(initial);
-          saveToSupabase(passphrase, initial)
+          setDataRaw(local);
+          logEvent('load-local-initial', { source: 'local-first-sync' });
+          saveToSupabase(passphrase, local)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
@@ -75,7 +123,10 @@ export function useSyncedData(passphrase) {
       .catch(() => {
         // Offline — use localStorage
         const local = readLocal();
-        if (local) setDataRaw(local);
+        if (local) {
+          setDataRaw(local);
+          logEvent('load-local-offline', { source: 'local-fallback' });
+        }
         setSyncStatus('offline');
       });
   }, [passphrase]);
@@ -84,18 +135,40 @@ export function useSyncedData(passphrase) {
   const setData = useCallback((updater) => {
     setDataRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      writeLocal(next);
+      // --- CRITICAL: Read latest from localStorage before writing ---
+      // This prevents a stale `prev` from overwriting fresher state
+      // that might have come from another tab via the storage event.
+      const currentLocal = readLocal() || DEFAULT_DATA;
+      const finalState = { ...currentLocal, ...next };
+
+      writeLocal(finalState);
+
+      logEvent('write-local', {
+        keys: Object.keys(finalState),
+        overrides: JSON.stringify(finalState.overrides),
+        completed: Object.keys(finalState.completedDays || {}).length,
+      });
 
       // Debounce Supabase write
       clearTimeout(debounceTimer.current);
       setSyncStatus('saving');
       debounceTimer.current = setTimeout(() => {
-        saveToSupabase(passphraseRef.current, next)
-          .then(() => setSyncStatus('synced'))
-          .catch(() => setSyncStatus('offline'));
+        logEvent('write-remote-start', {
+          source: 'debounced-save',
+          overrides: JSON.stringify(finalState.overrides),
+        });
+        saveToSupabase(passphraseRef.current, finalState)
+          .then(() => {
+            setSyncStatus('synced');
+            logEvent('write-remote-success', { source: 'debounced-save' });
+          })
+          .catch(() => {
+            setSyncStatus('offline');
+            logEvent('write-remote-fail', { source: 'debounced-save' });
+          });
       }, DEBOUNCE_MS);
 
-      return next;
+      return finalState;
     });
   }, []);
 

@@ -22,6 +22,7 @@ import { Icon } from './components/Icons';
 import { loadFromSupabase } from './lib/supabase';
 import { runMidnightCheck, todayStr, resolvedSession } from './lib/scheduler';
 import { SESSION_META } from './data/workouts';
+import { Toaster } from 'react-hot-toast';
 
 const TABS = [
   { id: 'today',    label: 'Today',    icon: 'zap' },
@@ -68,21 +69,59 @@ export default function App() {
     ...p, overrides: typeof fn === 'function' ? fn(p.overrides || {}) : fn,
   }));
 
+  // --- 🐞 DEBUG LOGGING ---
+  const logEvent = (event, details) => {
+    console.log(`[APP:${event}]`, {
+      ts: new Date().toISOString(),
+      ...details,
+    });
+  };
+  // --- END DEBUG LOGGING ---
+
   // Midnight check
-  const runCheck = (currentData) => {
-    const ps = currentData?.programStart;
-    const cd = currentData?.completedDays || {};
-    const ov = currentData?.overrides || {};
-    if (!ps) return;
-    const { overrides: newOv, events } = runMidnightCheck(ps, cd, ov);
+  const runCheck = () => {
+    if (!data.programStart) return;
+    console.log('[MIDNIGHT] Running check...');
+    const today = new Date().toISOString().split('T')[0];
+    const { overrides, events } = applySmartGuard(
+      data.programStart,
+      data.completedDays,
+      data.overrides
+    );
     if (JSON.stringify(newOv) !== JSON.stringify(ov)) {
+      logEvent('midnight-check-update', {
+        oldOverrides: JSON.stringify(ov),
+        newOverrides: JSON.stringify(newOv),
+        events: events.map(e => e.type),
+      });
       setData(p => ({ ...p, overrides: newOv }));
     }
     if (events.length > 0) setPendingAlertEvents(events);
   };
 
+  const handleResetSchedule = () => {
+    if (window.confirm('Are you sure you want to reset your schedule? This will remove all automatic shifts and recalculate your plan from your workout history. This cannot be undone.')) {
+      setData(prev => ({
+        ...prev,
+        overrides: {
+          // Preserve manual overrides, clear automatic ones
+          ...Object.fromEntries(Object.entries(prev.overrides).filter(([key]) => !key.startsWith('__'))),
+          __processedUpTo: null,
+          __shifts: [],
+          __resumeFrom: null,
+        },
+      }));
+      // Use a timeout to ensure the state update is processed before re-running the check
+      setTimeout(() => runCheck(), 100);
+      toast.success('Schedule has been reset!');
+    }
+  };
+
   useEffect(() => {
-    if (syncStatus === 'synced' && programStart) runCheck(data);
+    if (syncStatus === 'synced' && programStart) {
+      logEvent('midnight-check-trigger', { cause: 'sync-status-change' });
+      runCheck(data);
+    }
   }, [syncStatus]);
 
   useEffect(() => {
@@ -92,7 +131,11 @@ export default function App() {
       const midnight = new Date(now);
       midnight.setDate(midnight.getDate() + 1);
       midnight.setHours(0, 0, 30, 0);
-      midnightTimer.current = setTimeout(() => { runCheck(data); scheduleNext(); }, midnight - now);
+      midnightTimer.current = setTimeout(() => {
+        logEvent('midnight-check-trigger', { cause: 'timer' });
+        runCheck(data);
+        scheduleNext();
+      }, midnight - now);
     };
     scheduleNext();
     return () => clearTimeout(midnightTimer.current);
@@ -315,7 +358,7 @@ export default function App() {
                   <div style={{ fontSize: 12, color: 'var(--text)', fontStyle: 'italic' }}>
                     Started {new Date(programStart + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </div>
-                  <button onClick={() => { if (confirm('Reset program start date?')) { setProgramStart(null); setOverrides({}); } }} style={{
+                  <button onClick={handleResetSchedule} title="Reset Schedule" style={{
                     fontSize: 9, letterSpacing: 2, color: 'var(--destructive)',
                     background: 'rgba(181,74,53,0.06)', border: '1px solid rgba(181,74,53,0.25)',
                     borderRadius: 20, padding: '6px 14px', cursor: 'pointer', fontFamily: 'var(--font-mono)',
