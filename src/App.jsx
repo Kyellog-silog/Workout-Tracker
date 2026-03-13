@@ -172,7 +172,7 @@ export default function App() {
             </div>
             {/* Today's session chip */}
             {todayMeta && todaySession !== 'rest' && todaySession !== 'missed' && (
-              <div style={{
+              <div className="session-chip" style={{
                 fontSize: 9, padding: '3px 10px', borderRadius: 20,
                 background: todayMeta.dimColor, border: `1px solid ${todayMeta.borderColor}`,
                 color: todayMeta.color, letterSpacing: 2, fontFamily: 'var(--font-mono)',
@@ -183,7 +183,7 @@ export default function App() {
           </div>
 
           {/* Right controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {/* Sync status */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <Icon
@@ -197,7 +197,7 @@ export default function App() {
               </span>
             </div>
 
-            <button onClick={() => { setSelectedDate(today); setActiveTab('today'); }} style={{
+            <button className="today-btn" onClick={() => { setSelectedDate(today); setActiveTab('today'); }} style={{
               fontSize: 10, letterSpacing: 2, color: 'var(--muted-foreground)',
               background: 'var(--secondary)', border: '1px solid var(--border)',
               borderRadius: 20, padding: '5px 10px', cursor: 'pointer',

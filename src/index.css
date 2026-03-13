@@ -160,8 +160,11 @@ main > * {
 }
 
 /* ── Mobile header adjustments ─────────────────────────────── */
-@media (max-width: 400px) {
+@media (max-width: 520px) {
   .sync-label { display: none; }
+  .session-chip { display: none; }
+  .today-btn { display: none; }
+  .header-right { gap: 4px !important; }
 }
 
 /* ── Form inputs ───────────────────────────────────────────── */
