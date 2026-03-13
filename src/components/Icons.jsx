@@ -221,6 +221,16 @@ const ICONS = {
   square: (
     <rect x="4" y="4" width="16" height="16" rx="2" />
   ),
+  // Trophy / PR
+  trophy: (
+    <>
+      <path d="M6 9H4a2 2 0 0 1-2-2V5h4" />
+      <path d="M18 9h2a2 2 0 0 0 2-2V5h-4" />
+      <path d="M6 3h12v7a6 6 0 0 1-12 0V3z" />
+      <line x1="12" y1="16" x2="12" y2="20" />
+      <line x1="8" y1="20" x2="16" y2="20" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 16, color = 'currentColor', strokeWidth = 1.5, style = {} }) {

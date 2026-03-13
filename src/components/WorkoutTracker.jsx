@@ -10,7 +10,7 @@
  * Exercise data comes from customPlans (if the user has edited the plan)
  * or falls back to DEFAULT_EXERCISES.
  */
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { SESSION_META, DEFAULT_EXERCISES } from '../data/workouts';
 import { resolvedSession } from '../lib/scheduler';
 import { getExerciseHistory, getTodayPRs } from '../lib/prCalc';
@@ -133,8 +133,21 @@ function SetLogger({ exercise, todaySets, lastSessionSets, onSetsChange, session
   );
 }
 
+function useNarrow() {
+  const mq = typeof window !== 'undefined' ? window.matchMedia('(max-width: 479px)') : null;
+  const [narrow, setNarrow] = useState(() => mq?.matches ?? false);
+  useEffect(() => {
+    if (!mq) return;
+    const handler = (e) => setNarrow(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return narrow;
+}
+
 function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNotes, todaySets, onSetsChange, completedDaysHistory }) {
   const [expanded, setExpanded] = useState(false);
+  const narrow = useNarrow();
   const t = TYPE_META[exercise.type] || TYPE_META.bodyweight;
   const hasWeight = exercise.weightStart && parseFloat(exercise.weightStart) > 0;
 
@@ -152,7 +165,7 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
       boxShadow: checked ? 'none' : '1px 2px 4px rgba(50,35,20,0.06)',
     }}>
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', gap: narrow ? 8 : 12, padding: narrow ? '10px 12px' : '13px 16px', cursor: 'pointer' }}
         onClick={() => setExpanded(e => !e)}
       >
         {/* Order number */}
@@ -190,18 +203,18 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
             {exercise.rest ? ` · ${exercise.rest} rest` : ''}
             {hasWeight ? ` · ${exercise.weightStart}kg` : ''}
           </div>
+          {prTypes.length > 0 && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 9, padding: '2px 6px', borderRadius: 3, marginTop: 4,
+              background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.4)',
+              color: '#b8960c', letterSpacing: 1, fontFamily: 'var(--font-mono)',
+            }}>
+              <Icon name="trophy" size={9} color="#b8960c" strokeWidth={2} />
+              {PR_LABEL[prTypes[0]]}
+            </div>
+          )}
         </div>
-
-        {/* PR badge */}
-        {prTypes.length > 0 && (
-          <div style={{
-            fontSize: 9, padding: '3px 7px', borderRadius: 3, flexShrink: 0,
-            background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.4)',
-            color: '#b8960c', letterSpacing: 1, fontFamily: 'var(--font-mono)',
-          }}>
-            🏆 {PR_LABEL[prTypes[0]]}
-          </div>
-        )}
 
         {/* Expand chevron */}
         <span style={{
