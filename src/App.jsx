@@ -55,8 +55,9 @@ export default function App() {
   const selectedDate  = data.selectedDate  || today;
   const programStart  = data.programStart  || null;
   const completedDays = data.completedDays || {};
-  const customPlans   = data.customPlans   || {};
-  const overrides     = data.overrides     || {};
+  const customPlans     = data.customPlans     || {};
+  const overrides       = data.overrides       || {};
+  const streakRestores  = data.streakRestores  || {};
 
   const setSelectedDate  = (d)  => setData(p => ({ ...p, selectedDate: d }));
   const setProgramStart  = (d)  => setData(p => ({ ...p, programStart: d }));
@@ -69,6 +70,16 @@ export default function App() {
   const setOverrides = (fn) => setData(p => ({
     ...p, overrides: typeof fn === 'function' ? fn(p.overrides || {}) : fn,
   }));
+  const setStreakRestores = (fn) => setData(p => ({
+    ...p, streakRestores: typeof fn === 'function' ? fn(p.streakRestores || {}) : fn,
+  }));
+
+  const handleRestoreDay = (dateStr) => {
+    const monthKey = dateStr.slice(0, 7);
+    const current = streakRestores[monthKey] || [];
+    if (current.includes(dateStr) || current.length >= 5) return;
+    setStreakRestores(prev => ({ ...prev, [monthKey]: [...(prev[monthKey] || []), dateStr] }));
+  };
 
   // Midnight check
   const runCheck = () => {
@@ -379,7 +390,7 @@ export default function App() {
         {/* PROGRESS */}
         {activeTab === 'progress' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <Stats completedDays={completedDays} programStart={programStart} overrides={overrides} />
+            <Stats completedDays={completedDays} programStart={programStart} overrides={overrides} streakRestores={streakRestores} onRestoreDay={handleRestoreDay} />
             <Progression programStart={programStart} />
           </div>
         )}

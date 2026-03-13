@@ -8,40 +8,25 @@
  * - Per-session-type breakdown (Push/Pull/Legs) with proportional progress bars
  */
 import { SESSION_META as SESSIONS } from '../data/workouts';
-import { resolvedSession, todayStr, addDays, diffDays } from '../lib/scheduler';
+import { resolvedSession, todayStr, diffDays } from '../lib/scheduler';
+import { calcStreakInfo, restoresLeft } from '../lib/streakCalc';
 import { Icon } from './Icons';
 
-function calcDayStreak(completedDays, programStart, overrides) {
-  if (!programStart) return 0;
-  const today = todayStr();
-  const daysSinceStart = diffDays(programStart, today);
-  if (daysSinceStart < 0) return 0;
-  let streak = 0;
-  for (let i = 0; i <= daysSinceStart; i++) {
-    const date = addDays(today, -i);
-    if (date < programStart) break;
-    const s = resolvedSession(date, programStart, overrides);
-    if (!s || s === 'rest') continue; // rest days don't break or count
-    if (s === 'missed') break;
-    if (completedDays[date]?.allDone) { streak++; continue; }
-    if (date === today) continue; // today in progress — don't break
-    break; // past incomplete workout
-  }
-  return streak;
-}
-
-export default function Stats({ completedDays, programStart, overrides }) {
+export default function Stats({ completedDays, programStart, overrides, streakRestores, onRestoreDay }) {
   const today = todayStr();
 
   // Calculate stats
   const allDates = Object.keys(completedDays);
+  // E5: exclude future dates — someone editing storage shouldn't inflate the count
   const workoutDates = allDates.filter(d => {
+    if (d > today) return false;
     const s = resolvedSession(d, programStart, overrides);
     return s && s !== 'rest' && s !== 'missed' && completedDays[d]?.allDone;
   });
 
   // Streak (day-based: consecutive completed workout days, rest days pass through)
-  const dayStreak = calcDayStreak(completedDays, programStart, overrides);
+  const { streak: dayStreak, breakDate } = calcStreakInfo(completedDays, programStart, overrides, streakRestores);
+  const restoresRemaining = restoresLeft(breakDate, streakRestores);
 
   // Week since start
   let weekNum = 0;
@@ -80,6 +65,39 @@ export default function Stats({ completedDays, programStart, overrides }) {
           </div>
         ))}
       </div>
+
+      {/* Streak restore banner */}
+      {breakDate && (
+        <div style={{
+          background: 'var(--card)', border: `1px solid ${restoresLeft > 0 ? '#c48a2f' : 'var(--border)'}`,
+          borderRadius: 4, padding: '14px 18px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div style={{ fontSize: 10, color: '#c48a2f', letterSpacing: 2, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>STREAK BROKEN</div>
+            <div style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+              {new Date(breakDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              &nbsp;&middot;&nbsp;
+              {restoresRemaining}/5 restores left
+            </div>
+          </div>
+          <button
+            onClick={() => onRestoreDay(breakDate)}
+            disabled={restoresRemaining === 0}
+            style={{
+              fontSize: 9, letterSpacing: 2, fontFamily: 'var(--font-mono)', fontWeight: 700,
+              padding: '6px 12px', borderRadius: 20, cursor: restoresRemaining > 0 ? 'pointer' : 'not-allowed',
+              background: restoresRemaining > 0 ? 'transparent' : 'transparent',
+              border: `1px solid ${restoresRemaining > 0 ? '#c48a2f' : 'var(--border)'}`,
+              color: restoresRemaining > 0 ? '#c48a2f' : 'var(--muted-foreground)',
+              opacity: restoresRemaining === 0 ? 0.5 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            {restoresRemaining > 0 ? 'RESTORE' : 'NO RESTORES'}
+          </button>
+        </div>
+      )}
 
       {/* Session breakdown */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '18px 22px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
