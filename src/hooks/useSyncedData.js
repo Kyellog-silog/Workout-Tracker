@@ -36,6 +36,46 @@ function writeLocal(data) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(data)); } catch {}
 }
 
+/**
+ * Deep-merges two completedDays objects.
+ * For each date, merges the three sub-keys (checked, notes, sets) independently
+ * so that a stale local copy never wipes remote set logs from another device.
+ *
+ * Strategy per sub-key:
+ *   checked / notes — local wins per exercise (local is the "active" device)
+ *   sets            — remote sets are preserved for any exercise the local side
+ *                     has no entries for; local wins only when it has actual data
+ */
+function mergeCompletedDays(remote = {}, local = {}) {
+  const allDates = new Set([...Object.keys(remote), ...Object.keys(local)]);
+  const result = {};
+  for (const date of allDates) {
+    const r = remote[date];
+    const l = local[date];
+    if (!r) { result[date] = l; continue; }
+    if (!l) { result[date] = r; continue; }
+    // Both sides have this date — merge sub-keys
+    const remoteSets = r.sets || {};
+    const localSets  = l.sets || {};
+    const allExIds   = new Set([...Object.keys(remoteSets), ...Object.keys(localSets)]);
+    const mergedSets = {};
+    for (const id of allExIds) {
+      const localEx  = localSets[id];
+      const remoteEx = remoteSets[id];
+      // Use local only if it has actual logged sets; otherwise keep remote
+      mergedSets[id] = (Array.isArray(localEx) && localEx.length > 0) ? localEx : (remoteEx || []);
+    }
+    result[date] = {
+      ...r,
+      ...l,
+      checked: { ...(r.checked || {}), ...(l.checked || {}) },
+      notes:   { ...(r.notes   || {}), ...(l.notes   || {}) },
+      sets:    mergedSets,
+    };
+  }
+  return result;
+}
+
 const DEFAULT_DATA = {
   programStart: null,
   completedDays: {},
@@ -98,7 +138,7 @@ export function useSyncedData(passphrase) {
           // Deep merge overrides and completedDays, assuming local is fresher
           // (A proper CRDT or versioned-field approach would be better long-term)
           merged.overrides = { ...(validRemote.overrides || {}), ...(local.overrides || {}) };
-          merged.completedDays = { ...(validRemote.completedDays || {}), ...(local.completedDays || {}) };
+          merged.completedDays = mergeCompletedDays(validRemote.completedDays, local.completedDays);
 
           setDataRaw(merged);
           writeLocal(merged);
