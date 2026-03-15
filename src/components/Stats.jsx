@@ -9,11 +9,12 @@
  */
 import { SESSION_META as SESSIONS } from '../data/workouts';
 import { resolvedSession, todayStr, diffDays } from '../lib/scheduler';
+import { getPlanMeta } from '../lib/planUtils';
 import { calcStreakInfo, restoresLeft } from '../lib/streakCalc';
 import { totalVolume } from '../lib/prCalc';
 import { Icon } from './Icons';
 
-export default function Stats({ completedDays, programStart, overrides, streakRestores, onRestoreDay }) {
+export default function Stats({ completedDays, programStart, overrides, streakRestores, onRestoreDay, userPlans, weeklySchedule }) {
   const today = todayStr();
 
   // Calculate stats
@@ -21,12 +22,12 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
   // E5: exclude future dates — someone editing storage shouldn't inflate the count
   const workoutDates = allDates.filter(d => {
     if (d > today) return false;
-    const s = resolvedSession(d, programStart, overrides);
+    const s = resolvedSession(d, programStart, overrides, weeklySchedule);
     return s && s !== 'rest' && s !== 'missed' && completedDays[d]?.allDone;
   });
 
   // Streak (day-based: consecutive completed workout days, rest days pass through)
-  const { streak: dayStreak, breakDate } = calcStreakInfo(completedDays, programStart, overrides, streakRestores);
+  const { streak: dayStreak, breakDate } = calcStreakInfo(completedDays, programStart, overrides, streakRestores, undefined, weeklySchedule);
   const restoresRemaining = restoresLeft(breakDate, streakRestores);
 
   // Week since start
@@ -36,12 +37,18 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
     weekNum = Math.floor(diff / 7) + 1;
   }
 
-  // Session counts
-  const sessionCounts = { push: 0, pull: 0, legs: 0 };
+  // Session counts — dynamic across all user-defined plans
+  const sessionCounts = {};
   workoutDates.forEach(d => {
-    const s = resolvedSession(d, programStart, overrides);
-    if (s && sessionCounts[s] !== undefined) sessionCounts[s]++;
+    const s = resolvedSession(d, programStart, overrides, weeklySchedule);
+    if (s && s !== 'rest' && s !== 'missed') {
+      sessionCounts[s] = (sessionCounts[s] || 0) + 1;
+    }
   });
+  // Ensure every user plan key appears (even with 0 count)
+  if (userPlans) {
+    Object.keys(userPlans).forEach(k => { if (sessionCounts[k] === undefined) sessionCounts[k] = 0; });
+  }
 
   // Volume
   const volKg = totalVolume(completedDays);
@@ -123,7 +130,7 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '18px 22px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
         <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 16, fontFamily: 'var(--font-mono)' }}>SESSION BREAKDOWN</div>
         {Object.entries(sessionCounts).map(([key, count]) => {
-          const s = SESSIONS[key];
+          const s = getPlanMeta(key, userPlans);
           const maxCount = Math.max(...Object.values(sessionCounts), 1);
           return (
             <div key={key} style={{ marginBottom: 12 }}>

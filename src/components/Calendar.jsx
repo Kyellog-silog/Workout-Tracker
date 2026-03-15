@@ -8,20 +8,25 @@
  * - Right-click / long-press to open the DayActionSheet for overrides
  * - Visual indicators for completion, partial completion, and overrides
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { SESSION_META } from '../data/workouts';
 import { resolvedSession, todayStr, isBefore } from '../lib/scheduler';
+import { getPlanMeta } from '../lib/planUtils';
 import { Icon } from './Icons';
 import DayActionSheet from './DayActionSheet';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-export default function Calendar({ programStart, setProgramStart, completedDays, onSelectDay, selectedDate, overrides, setOverrides }) {
+export default function Calendar({
+  programStart, setProgramStart, completedDays, onSelectDay, selectedDate,
+  overrides, setOverrides, userPlans, weeklySchedule, setWeeklySchedule,
+}) {
   const todayS = todayStr();
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [actionDate, setActionDate] = useState(null);
+  const touchTimerRef = useRef(null);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -81,8 +86,8 @@ export default function Calendar({ programStart, setProgramStart, completedDays,
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isToday = dateStr === todayS;
             const isPast = isBefore(dateStr, todayS);
-            const session = resolvedSession(dateStr, programStart, overrides);
-            const s = session ? SESSION_META[session] : null;
+            const session = resolvedSession(dateStr, programStart, overrides, weeklySchedule);
+            const s = session ? getPlanMeta(session, userPlans) : null;
             const isDone = completedDays[dateStr]?.allDone;
             const isPartial = completedDays[dateStr] && !isDone;
             const isSelected = selectedDate === dateStr;
@@ -109,6 +114,12 @@ export default function Calendar({ programStart, setProgramStart, completedDays,
                   onSelectDay(dateStr);
                 }}
                 onContextMenu={e => { e.preventDefault(); if (programStart) setActionDate(dateStr); }}
+                onTouchStart={() => {
+                  if (!programStart) return;
+                  touchTimerRef.current = setTimeout(() => setActionDate(dateStr), 450);
+                }}
+                onTouchEnd={() => clearTimeout(touchTimerRef.current)}
+                onTouchMove={() => clearTimeout(touchTimerRef.current)}
                 style={{
                   aspectRatio: '1', borderRadius: 3, position: 'relative',
                   border, background: bg, cursor: 'pointer',
@@ -131,7 +142,7 @@ export default function Calendar({ programStart, setProgramStart, completedDays,
                     fontSize: 6, letterSpacing: 0.5, fontWeight: 700,
                     color: s?.color, opacity: isDone ? 1 : 0.5,
                     fontFamily: 'var(--font-mono)',
-                  }}>{session.toUpperCase()}</span>
+                  }}>{s?.label?.toUpperCase() || session.toUpperCase()}</span>
                 )}
                 {isMissed && (
                   <span style={{ fontSize: 6, color: 'var(--destructive)', opacity: 0.8, fontFamily: 'var(--font-mono)' }}>MISS</span>
@@ -163,16 +174,23 @@ export default function Calendar({ programStart, setProgramStart, completedDays,
           })}
         </div>
 
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 18, flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-          {Object.entries(SESSION_META)
-            .filter(([k]) => k !== 'rest')
-            .map(([key, s]) => (
+        {/* Legend: dynamic — shows all user plans */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+          {userPlans && Object.entries(userPlans).map(([key, v]) => {
+            const m = getPlanMeta(key, userPlans);
+            return (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />
-                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 1, fontFamily: 'var(--font-mono)' }}>{s.label}</span>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: m.color }} />
+                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 1, fontFamily: 'var(--font-mono)' }}>{m.label.toUpperCase()}</span>
               </div>
-            ))}
+            );
+          })}
+          {SESSION_META.cardio && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: SESSION_META.cardio.color }} />
+              <span style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 1, fontFamily: 'var(--font-mono)' }}>CARDIO</span>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--destructive)' }} />
             <span style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 1, fontFamily: 'var(--font-mono)' }}>MISSED</span>
@@ -192,6 +210,10 @@ export default function Calendar({ programStart, setProgramStart, completedDays,
           overrides={overrides}
           setOverrides={setOverrides}
           onClose={() => setActionDate(null)}
+          userPlans={userPlans}
+          weeklySchedule={weeklySchedule}
+          setWeeklySchedule={setWeeklySchedule}
+          completedDays={completedDays}
         />
       )}
     </>

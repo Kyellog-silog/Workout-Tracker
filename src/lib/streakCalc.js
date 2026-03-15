@@ -23,9 +23,10 @@ import { resolvedSession, todayStr, addDays, diffDays } from './scheduler';
  * @param {Object}  overrides       — scheduler overrides object
  * @param {Object}  streakRestores  — { [monthKey]: string[] } restored dates
  * @param {string}  [today]         — override "today" for testing (default: real today)
+ * @param {string[]} [weeklySchedule] — custom weekly rotation (default: DEFAULT_SCHEDULE)
  * @returns {{ streak: number, breakDate: string|null }}
  */
-export function calcStreakInfo(completedDays, programStart, overrides, streakRestores, today = todayStr()) {
+export function calcStreakInfo(completedDays, programStart, overrides, streakRestores, today = todayStr(), weeklySchedule) {
   if (!programStart) return { streak: 0, breakDate: null };
   const daysSinceStart = diffDays(programStart, today);
   if (daysSinceStart < 0) return { streak: 0, breakDate: null };
@@ -36,7 +37,7 @@ export function calcStreakInfo(completedDays, programStart, overrides, streakRes
     const date = addDays(today, -i);
     if (date < programStart) break;
 
-    const s = resolvedSession(date, programStart, overrides);
+    const s = resolvedSession(date, programStart, overrides, weeklySchedule);
 
     // Transparent days: rest and guard-marked days don't count or break
     if (!s || s === 'rest' || s === 'missed') continue;

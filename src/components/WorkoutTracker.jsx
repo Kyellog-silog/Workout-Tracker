@@ -11,8 +11,9 @@
  * or falls back to DEFAULT_EXERCISES.
  */
 import { useState, useEffect, useMemo } from 'react';
-import { SESSION_META, DEFAULT_EXERCISES } from '../data/workouts';
+import { SESSION_META } from '../data/workouts';
 import { resolvedSession } from '../lib/scheduler';
+import { getPlanMeta, getPlanExercises, isPlanCustomised } from '../lib/planUtils';
 import { getExerciseHistory, getTodayPRs } from '../lib/prCalc';
 import { Icon } from './Icons';
 import { clampNumber } from '../lib/securityGuards';
@@ -304,11 +305,11 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
   );
 }
 
-export default function WorkoutTracker({ selectedDate, programStart, completedDays, setCompletedDays, customPlans, overrides }) {
-  const sessionKey = resolvedSession(selectedDate, programStart, overrides);
-  const meta = sessionKey ? SESSION_META[sessionKey] : null;
+export default function WorkoutTracker({ selectedDate, programStart, completedDays, setCompletedDays, userPlans, weeklySchedule, overrides }) {
+  const sessionKey = resolvedSession(selectedDate, programStart, overrides, weeklySchedule);
+  const meta = sessionKey ? getPlanMeta(sessionKey, userPlans) : null;
   const exercises = sessionKey && sessionKey !== 'rest' && sessionKey !== 'missed'
-    ? ((customPlans?.[sessionKey]) || DEFAULT_EXERCISES[sessionKey] || [])
+    ? getPlanExercises(sessionKey, userPlans)
     : [];
 
   // completedDays without today's sets, used for PR comparison
@@ -388,6 +389,142 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
     );
   }
 
+  if (sessionKey === 'cardio') {
+    const cardioLog = completedDays[selectedDate]?.cardioLog || {};
+    const isCardioDone = !!cardioLog.done;
+
+    const setCardioField = (field, value) => {
+      setCompletedDays(prev => {
+        const day = prev[selectedDate] || {};
+        const newLog = { ...(day.cardioLog || {}), [field]: value };
+        const allNowDone = field === 'done' ? !!value : (newLog.done || false);
+        return { ...prev, [selectedDate]: { ...day, cardioLog: newLog, allDone: allNowDone } };
+      });
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* Header */}
+        <div style={{ background: meta.dimColor, border: `1px solid ${meta.borderColor}`, borderRadius: 4, padding: '22px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 2, fontFamily: 'var(--font-mono)' }}>
+                {dateLabel.toUpperCase()}
+              </div>
+              <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: 36, color: meta.color, letterSpacing: 2, lineHeight: 1 }}>
+                {meta.label}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4, fontStyle: 'italic' }}>{meta.focus}</div>
+            </div>
+            {isCardioDone && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Icon name="check" size={20} color={meta.color} strokeWidth={2.5} />
+                <Icon name="flame" size={20} color={meta.color} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Activity ideas */}
+        {meta.restActivities?.length > 0 && (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '16px 20px' }}>
+            <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 10, fontFamily: 'var(--font-mono)' }}>ACTIVITY IDEAS</div>
+            {meta.restActivities.map((a, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: meta.color, marginTop: 6, flexShrink: 0, opacity: 0.6 }} />
+                <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{a}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Cardio log */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '20px 22px' }}>
+          <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 16, fontFamily: 'var(--font-mono)' }}>CARDIO LOG</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
+
+            {/* Distance */}
+            <div>
+              <label style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 2, display: 'block', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>DISTANCE</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <input
+                  type="number" min={0} max={999} step={0.1}
+                  value={cardioLog.distance ?? ''}
+                  onChange={e => setCardioField('distance', e.target.value)}
+                  placeholder="0.0"
+                  style={{
+                    flex: 1, padding: '9px 8px', borderRadius: 4,
+                    background: 'var(--muted)', border: '1px solid var(--border)',
+                    color: 'var(--foreground)', fontSize: 18, fontFamily: 'var(--font-mono)',
+                    outline: 'none', boxSizing: 'border-box', textAlign: 'right', minWidth: 0,
+                  }}
+                />
+                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>km</span>
+              </div>
+            </div>
+
+            {/* Steps */}
+            <div>
+              <label style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 2, display: 'block', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>STEPS</label>
+              <input
+                type="number" min={0} max={999999} step={500}
+                value={cardioLog.steps ?? ''}
+                onChange={e => setCardioField('steps', e.target.value)}
+                placeholder="0"
+                style={{
+                  width: '100%', padding: '9px 8px', borderRadius: 4,
+                  background: 'var(--muted)', border: '1px solid var(--border)',
+                  color: 'var(--foreground)', fontSize: 18, fontFamily: 'var(--font-mono)',
+                  outline: 'none', boxSizing: 'border-box', textAlign: 'right',
+                }}
+              />
+            </div>
+
+            {/* Pace */}
+            <div>
+              <label style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 2, display: 'block', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>PACE</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <input
+                  type="text"
+                  value={cardioLog.pace ?? ''}
+                  onChange={e => setCardioField('pace', e.target.value)}
+                  placeholder="5:30"
+                  maxLength={8}
+                  style={{
+                    flex: 1, padding: '9px 8px', borderRadius: 4,
+                    background: 'var(--muted)', border: '1px solid var(--border)',
+                    color: 'var(--foreground)', fontSize: 18, fontFamily: 'var(--font-mono)',
+                    outline: 'none', boxSizing: 'border-box', textAlign: 'right', minWidth: 0,
+                  }}
+                />
+                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>min/km</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Mark complete */}
+          <button
+            onClick={() => setCardioField('done', !isCardioDone)}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 4, cursor: 'pointer',
+              background: isCardioDone ? meta.color : 'var(--muted)',
+              border: `2px solid ${isCardioDone ? meta.color : 'var(--border)'}`,
+              color: isCardioDone ? '#fff' : 'var(--muted-foreground)',
+              fontSize: 11, fontWeight: 700, letterSpacing: 2,
+              fontFamily: 'var(--font-mono)', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {isCardioDone && <Icon name="check" size={13} color="#fff" strokeWidth={2.5} />}
+            {isCardioDone ? 'CARDIO COMPLETE ✓' : 'MARK COMPLETE'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Session header */}
@@ -406,7 +543,7 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginTop: 4, fontStyle: 'italic' }}>
               {meta.focus}
-              {customPlans?.[sessionKey] && (
+              {isPlanCustomised(sessionKey, userPlans) && (
                 <span style={{ color: meta.color, marginLeft: 8, fontSize: 9, letterSpacing: 1, fontFamily: 'var(--font-mono)', fontStyle: 'normal' }}>· CUSTOM</span>
               )}
             </div>
@@ -458,7 +595,15 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
       </div>
 
       {/* Exercises */}
-      {exercises.map(ex => (
+      {exercises.length === 0 ? (
+        <div style={{
+          padding: '28px 20px', textAlign: 'center',
+          background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4,
+          color: 'var(--muted-foreground)', fontSize: 12, fontStyle: 'italic', lineHeight: 1.7,
+        }}>
+          No exercises yet. Add some in the <strong>Edit</strong> tab.
+        </div>
+      ) : exercises.map(ex => (
         <ExerciseCard
           key={ex.id}
           exercise={ex}

@@ -82,6 +82,29 @@ export const SESSION_META = {
       "Hydration: 35–45ml per kg bodyweight",
     ],
   },
+  cardio: {
+    label: "CARDIO",
+    color: "#4a7c59",
+    dimColor: "rgba(74,124,89,0.10)",
+    borderColor: "rgba(74,124,89,0.28)",
+    focus: "Cardiovascular · Endurance",
+    warmup: [
+      "5 min easy walk or slow jog",
+      "Leg swings, arm circles, hip rotations",
+    ],
+    cooldown: [
+      "5 min easy walk",
+      "Standing quad, calf and hip-flexor stretches",
+    ],
+    restActivities: [
+      "20–45 min steady-state cardio (run, cycle, swim, row)",
+      "Keep heart rate at 60–70% max for aerobic base",
+      "Intervals: 30s hard / 90s easy × 8–10 rounds",
+      "Finish with 5 min easy cool-down and light stretching",
+      "Protein target: 1.6–2g per kg bodyweight today",
+      "Hydration: 35–45ml per kg bodyweight",
+    ],
+  },
 };
 
 // Default exercises — used as fallback when user has no custom plan
@@ -264,12 +287,33 @@ export const DEFAULT_EXERCISES = {
   ],
 };
 
+// Default exercises for cardio — empty, user fills in their own
+// exercises or the session shows cardio activity suggestions.
+export const CARDIO_DEFAULT_ACTIVITIES = [
+  "20–45 min steady-state cardio (run, cycle, swim, row)",
+  "Keep heart rate at 60–70% max for aerobic base",
+];
+
 // 5-day rotating schedule (repeating pattern)
 // Week A: Push Pull Legs Rest Push Pull Rest
 // Week B: Legs Push Pull Rest Legs Push Rest
 // Net result: every muscle hit exactly 2x per week
 export const DEFAULT_SCHEDULE = [
   "push", "pull", "legs", "rest", "push", "pull", "rest",
+];
+
+// Preset colour palette for custom plans (earthy / muted, matching app aesthetic)
+export const PLAN_COLORS = [
+  "#a05c2c", // warm brown (Push default)
+  "#2c6e7a", // teal (Pull default)
+  "#6b4fa0", // purple (Legs default)
+  "#4a7c59", // green (Cardio default)
+  "#7a4a2c", // dark rust
+  "#2c4a7a", // navy
+  "#7a2c55", // rose
+  "#4a6b7a", // steel blue
+  "#6b7a2c", // olive
+  "#7a5c2c", // sand
 ];
 
 export const PROGRESSION_PHASES = [

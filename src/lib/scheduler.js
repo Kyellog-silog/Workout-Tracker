@@ -75,18 +75,21 @@ export function isAllDone(date, completedDays) {
 
 // ─── Base schedule (no overrides) ────────────────────────────────────────────
 
-export function baseSessionForDate(date, programStart) {
+export function baseSessionForDate(date, programStart, weeklySchedule) {
   if (!programStart) return null;
+  const schedule = weeklySchedule || DEFAULT_SCHEDULE;
   const diff = diffDays(programStart, date);
   if (diff < 0) return null;
-  return DEFAULT_SCHEDULE[diff % DEFAULT_SCHEDULE.length];
+  return schedule[diff % schedule.length];
 }
 
 // ─── Resolved session (full override + shift awareness) ───────────────────────
 
-export function resolvedSession(date, programStart, overrides) {
+export function resolvedSession(date, programStart, overrides, weeklySchedule) {
   if (!programStart) return null;
   const ov = overrides || {};
+  const schedule = weeklySchedule || DEFAULT_SCHEDULE;
+  const schedLen = schedule.length;
 
   // 1. Direct override on this exact date
   if (ov[date] !== undefined && ov[date] !== null) return ov[date];
@@ -101,8 +104,8 @@ export function resolvedSession(date, programStart, overrides) {
     const daysToResume = diffDays(programStart, ov.__resumeFrom);
     const baseIdxAtResume = daysToResume - shiftDebtBeforeResume;
     const daysFromResume = diffDays(ov.__resumeFrom, date);
-    const idx = (baseIdxAtResume + daysFromResume) % DEFAULT_SCHEDULE.length;
-    return DEFAULT_SCHEDULE[idx < 0 ? idx + DEFAULT_SCHEDULE.length : idx];
+    const idx = (baseIdxAtResume + daysFromResume) % schedLen;
+    return schedule[idx < 0 ? idx + schedLen : idx];
   }
 
   // 3. Normal shift accumulation
@@ -115,12 +118,12 @@ export function resolvedSession(date, programStart, overrides) {
   if (baseDiff < 0) return null;
   const shiftedDiff = baseDiff - shiftDebt;
   if (shiftedDiff < 0) return null;
-  return DEFAULT_SCHEDULE[shiftedDiff % DEFAULT_SCHEDULE.length];
+  return schedule[shiftedDiff % schedLen];
 }
 
 // ─── Miss detection (idempotent via __processedUpTo) ─────────────────────────
 
-export function getUnresolvedMisses(programStart, completedDays, overrides, scanUntil) {
+export function getUnresolvedMisses(programStart, completedDays, overrides, scanUntil, weeklySchedule) {
   if (!programStart) return [];
   const ov = overrides || {};
   const scanFrom = ov.__processedUpTo ? addDays(ov.__processedUpTo, 1) : programStart;
@@ -129,7 +132,7 @@ export function getUnresolvedMisses(programStart, completedDays, overrides, scan
   const missed = [];
   let cursor = effectiveFrom;
   while (isBefore(cursor, scanUntil)) {
-    const session = resolvedSession(cursor, programStart, ov);
+    const session = resolvedSession(cursor, programStart, ov, weeklySchedule);
     const isWorkout = session && session !== 'rest' && session !== 'missed';
     const hasActivity = isTrained(cursor, completedDays);
     const hasOverride = Object.prototype.hasOwnProperty.call(ov, cursor);
@@ -144,9 +147,9 @@ export function getUnresolvedMisses(programStart, completedDays, overrides, scan
 
 // ─── Smart Guard ─────────────────────────────────────────────────────────────
 
-export function applySmartGuard(programStart, completedDays, currentOverrides, today) {
+export function applySmartGuard(programStart, completedDays, currentOverrides, today, weeklySchedule) {
   const ov = currentOverrides || {};
-  const misses = getUnresolvedMisses(programStart, completedDays, ov, today);
+  const misses = getUnresolvedMisses(programStart, completedDays, ov, today, weeklySchedule);
 
   if (misses.length === 0) {
     // Still update processedUpTo watermark so future runs are fast
@@ -229,7 +232,7 @@ export function clearOverride(date, overrides) {
 }
 
 /** Called on app open — runs the midnight check */
-export function runMidnightCheck(programStart, completedDays, overrides) {
+export function runMidnightCheck(programStart, completedDays, overrides, weeklySchedule) {
   if (!programStart) return { overrides: overrides || {}, events: [] };
-  return applySmartGuard(programStart, completedDays, overrides || {}, todayStr());
+  return applySmartGuard(programStart, completedDays, overrides || {}, todayStr(), weeklySchedule);
 }

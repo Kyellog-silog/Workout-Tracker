@@ -9,8 +9,9 @@
  */
 import { PROGRESSION_PHASES, DEFAULT_EXERCISES, SESSION_META } from '../data/workouts';
 import { computePRs, getExerciseHistory } from '../lib/prCalc';
+import { getPlanMeta, getPlanExercises } from '../lib/planUtils';
 
-export default function Progression({ programStart, completedDays = {}, overrides = {} }) {
+export default function Progression({ programStart, completedDays = {}, overrides = {}, userPlans }) {
   const today = new Date();
   let currentPhase = 0;
   if (programStart) {
@@ -21,11 +22,15 @@ export default function Progression({ programStart, completedDays = {}, override
     else currentPhase = 0;
   }
 
-  // Build exercise records grouped by session type
-  const sessionTypes = ['push', 'pull', 'legs'];
-  const recordSections = sessionTypes.map(key => {
-    const meta = SESSION_META[key];
-    const exercises = DEFAULT_EXERCISES[key] || [];
+  // Build exercise records grouped by plan — uses userPlans when available,
+  // falls back to the original push/pull/legs defaults.
+  const planEntries = userPlans
+    ? Object.entries(userPlans)
+    : ['push', 'pull', 'legs'].map(k => [k, null]);
+
+  const recordSections = planEntries.map(([key, _planData]) => {
+    const meta = getPlanMeta(key, userPlans);
+    const exercises = getPlanExercises(key, userPlans);
     const records = exercises
       .map(ex => {
         const prs = computePRs(ex.id, completedDays);

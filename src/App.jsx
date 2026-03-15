@@ -20,8 +20,9 @@ import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
 import { hashPassphrase, loadFromSupabaseWithHash } from './lib/supabase';
-import { applySmartGuard, todayStr, resolvedSession } from './lib/scheduler';
-import { SESSION_META } from './data/workouts';
+import { applySmartGuard, todayStr, resolvedSession, addDays, isBefore } from './lib/scheduler';
+import { SESSION_META, DEFAULT_SCHEDULE } from './data/workouts';
+import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey } from './lib/planUtils';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -43,9 +44,27 @@ const STATUS_CONFIG = {
 };
 
 export default function App() {
-  const [passphrase, setPassphrase] = useState(() => {
-    try { return localStorage.getItem(PASSPHRASE_KEY) || null; } catch { return null; }
-  });
+  const [passphrase, setPassphrase] = useState(null);
+
+  // On mount: read stored passphrase; if it's a legacy plain-text value
+  // (not a 64-char hex SHA-256 hash), re-hash it and update localStorage.
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = localStorage.getItem(PASSPHRASE_KEY);
+        if (!stored) return;
+        const isHash = /^[0-9a-f]{64}$/i.test(stored);
+        if (isHash) {
+          setPassphrase(stored);
+        } else {
+          // Legacy plain-text passphrase — hash it now and overwrite
+          const hash = await hashPassphrase(stored);
+          localStorage.setItem(PASSPHRASE_KEY, hash);
+          setPassphrase(hash);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
   const [activeTab, setActiveTab] = useState('today');
   const [pendingAlertEvents, setPendingAlertEvents] = useState([]);
   const midnightTimer = useRef(null);
@@ -55,18 +74,64 @@ export default function App() {
   const selectedDate  = data.selectedDate  || today;
   const programStart  = data.programStart  || null;
   const completedDays = data.completedDays || {};
-  const customPlans     = data.customPlans     || {};
-  const overrides       = data.overrides       || {};
+  const overrides     = data.overrides     || {};
   const streakRestores  = data.streakRestores  || {};
+
+  // ── Custom plans: derive effective userPlans from raw data or legacy customPlans ──
+  const userPlans = data.userPlans || initUserPlansFromLegacy(data.customPlans || {});
+  const weeklySchedule = data.weeklySchedule || [...DEFAULT_SCHEDULE];
 
   const setSelectedDate  = (d)  => setData(p => ({ ...p, selectedDate: d }));
   const setProgramStart  = (d)  => setData(p => ({ ...p, programStart: d }));
   const setCompletedDays = (fn) => setData(p => ({
     ...p, completedDays: typeof fn === 'function' ? fn(p.completedDays || {}) : fn,
   }));
-  const setCustomPlans = (fn) => setData(p => ({
-    ...p, customPlans: typeof fn === 'function' ? fn(p.customPlans || {}) : fn,
+  const setUserPlans = (fn) => setData(p => ({
+    ...p, userPlans: typeof fn === 'function' ? fn(p.userPlans || initUserPlansFromLegacy(p.customPlans || {})) : fn,
   }));
+  const setWeeklySchedule = (fnOrArray) => setData(p => {
+    const oldSchedule = p.weeklySchedule || [...DEFAULT_SCHEDULE];
+    const newSchedule = typeof fnOrArray === 'function' ? fnOrArray(oldSchedule) : fnOrArray;
+
+    // Short-circuit if nothing changed
+    if (newSchedule.every((v, i) => v === oldSchedule[i])) return { ...p, weeklySchedule: newSchedule };
+
+    // Pin overrides for any past/today completed day whose resolved session would change,
+    // so that schedule edits never retroactively alter completed workout records.
+    const pCompletedDays = p.completedDays || {};
+    const pProgramStart = p.programStart;
+    const pOverrides = p.overrides || {};
+    const pinnedOverrides = {};
+
+    if (pProgramStart) {
+      const todayS = todayStr();
+      let cursor = pProgramStart;
+      // Walk from program start up to and including today
+      while (!isBefore(todayS, cursor)) {
+        const dayData = pCompletedDays[cursor];
+        const hasData = dayData && (
+          dayData.allDone ||
+          Object.values(dayData.checked || {}).some(Boolean) ||
+          dayData.cardio
+        );
+        // Only pin days that have data and don't already have an explicit override
+        if (hasData && pOverrides[cursor] === undefined) {
+          const oldSession = resolvedSession(cursor, pProgramStart, pOverrides, oldSchedule);
+          const newSession = resolvedSession(cursor, pProgramStart, pOverrides, newSchedule);
+          if (oldSession !== newSession) {
+            pinnedOverrides[cursor] = oldSession;
+          }
+        }
+        cursor = addDays(cursor, 1);
+      }
+    }
+
+    return {
+      ...p,
+      weeklySchedule: newSchedule,
+      overrides: { ...pOverrides, ...pinnedOverrides },
+    };
+  });
   const setOverrides = (fn) => setData(p => ({
     ...p, overrides: typeof fn === 'function' ? fn(p.overrides || {}) : fn,
   }));
@@ -81,6 +146,71 @@ export default function App() {
     setStreakRestores(prev => ({ ...prev, [monthKey]: [...(prev[monthKey] || []), dateStr] }));
   };
 
+  // ── Plan management handlers ──────────────────────────────────────────────
+
+  const handleAddPlan = (label, color) => {
+    const newKey = generateUniqueKey(label, Object.keys(userPlans));
+    setData(prev => ({
+      ...prev,
+      userPlans: {
+        ...(prev.userPlans || initUserPlansFromLegacy(prev.customPlans || {})),
+        [newKey]: { label: label.toUpperCase(), color, focus: '', exercises: [], defaultKey: null },
+      },
+    }));
+  };
+
+  const handleRenamePlan = (oldKey, newLabel) => {
+    const newKey = generateUniqueKey(newLabel, Object.keys(userPlans).filter(k => k !== oldKey));
+    setData(prev => renamePlanInData(
+      { ...prev, userPlans: prev.userPlans || initUserPlansFromLegacy(prev.customPlans || {}) },
+      oldKey, newKey, newLabel
+    ));
+  };
+
+  const handleDeletePlan = (planKey) => {
+    const count = countCompletedSessionsForPlan(planKey, completedDays, programStart, overrides, weeklySchedule);
+    const label = userPlans[planKey]?.label || planKey.toUpperCase();
+    const msg = count > 0
+      ? `${count} session${count !== 1 ? 's' : ''} logged under ${label}. Past data will be preserved but this plan will be removed from your schedule.\n\nDelete "${label}"?`
+      : `Delete "${label}"? This cannot be undone.`;
+    if (!confirm(msg)) return;
+    setData(prev => deletePlanFromData(
+      { ...prev, userPlans: prev.userPlans || initUserPlansFromLegacy(prev.customPlans || {}) },
+      planKey, programStart
+    ));
+  };
+
+  const handleUpdatePlanColor = (planKey, color) => {
+    setUserPlans(prev => ({
+      ...prev,
+      [planKey]: { ...prev[planKey], color },
+    }));
+  };
+
+  const handleUpdatePlanFocus = (planKey, focus) => {
+    setUserPlans(prev => ({
+      ...prev,
+      [planKey]: { ...prev[planKey], focus },
+    }));
+  };
+
+  // ── One-time migration: customPlans → userPlans, seed weeklySchedule ──
+  useEffect(() => {
+    if (syncStatus !== 'synced') return;
+    if (!data.userPlans || !data.weeklySchedule) {
+      setData(p => {
+        const next = {
+          ...p,
+          userPlans: p.userPlans || initUserPlansFromLegacy(p.customPlans || {}),
+          weeklySchedule: p.weeklySchedule || [...DEFAULT_SCHEDULE],
+        };
+        // Clean up old key
+        if (next.customPlans) delete next.customPlans;
+        return next;
+      });
+    }
+  }, [syncStatus]);
+
   // Midnight check
   const runCheck = () => {
     if (!data.programStart) return;
@@ -88,7 +218,8 @@ export default function App() {
       data.programStart,
       data.completedDays,
       data.overrides,
-      todayStr()
+      todayStr(),
+      weeklySchedule
     );
     if (JSON.stringify(newOv) !== JSON.stringify(data.overrides)) {
       setData(p => ({ ...p, overrides: newOv }));
@@ -156,8 +287,8 @@ export default function App() {
   };
 
   const statusCfg = STATUS_CONFIG[syncStatus] || STATUS_CONFIG.synced;
-  const todaySession = resolvedSession(today, programStart, overrides);
-  const todayMeta = todaySession ? SESSION_META[todaySession] : null;
+  const todaySession = resolvedSession(today, programStart, overrides, weeklySchedule);
+  const todayMeta = todaySession ? getPlanMeta(todaySession, userPlans) : null;
 
   if (!passphrase) return <PassphraseGate onUnlock={handleUnlock} />;
 
@@ -300,7 +431,8 @@ export default function App() {
               programStart={programStart}
               completedDays={completedDays}
               setCompletedDays={setCompletedDays}
-              customPlans={customPlans}
+              userPlans={userPlans}
+              weeklySchedule={weeklySchedule}
               overrides={overrides}
             />
           </div>
@@ -317,6 +449,9 @@ export default function App() {
               selectedDate={selectedDate}
               overrides={overrides}
               setOverrides={setOverrides}
+              userPlans={userPlans}
+              weeklySchedule={weeklySchedule}
+              setWeeklySchedule={setWeeklySchedule}
             />
             {programStart && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '20px 24px' }}>
@@ -384,15 +519,34 @@ export default function App() {
                 Edit exercises, paste a text list, or load a .txt file. Changes apply to future sessions — past logs are never touched.
               </div>
             </div>
-            <PlanEditor customPlans={customPlans} setCustomPlans={setCustomPlans} />
+            <PlanEditor
+              userPlans={userPlans}
+              setUserPlans={setUserPlans}
+              weeklySchedule={weeklySchedule}
+              setWeeklySchedule={setWeeklySchedule}
+              programStart={programStart}
+              onAddPlan={handleAddPlan}
+              onRenamePlan={handleRenamePlan}
+              onDeletePlan={handleDeletePlan}
+              onUpdatePlanColor={handleUpdatePlanColor}
+              onUpdatePlanFocus={handleUpdatePlanFocus}
+            />
           </div>
         )}
 
         {/* PROGRESS */}
         {activeTab === 'progress' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <Stats completedDays={completedDays} programStart={programStart} overrides={overrides} streakRestores={streakRestores} onRestoreDay={handleRestoreDay} />
-            <Progression programStart={programStart} completedDays={completedDays} overrides={overrides} />
+            <Stats
+              completedDays={completedDays}
+              programStart={programStart}
+              overrides={overrides}
+              streakRestores={streakRestores}
+              onRestoreDay={handleRestoreDay}
+              userPlans={userPlans}
+              weeklySchedule={weeklySchedule}
+            />
+            <Progression programStart={programStart} completedDays={completedDays} overrides={overrides} userPlans={userPlans} />
           </div>
         )}
 
