@@ -443,7 +443,7 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
         <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '20px 22px' }}>
           <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 16, fontFamily: 'var(--font-mono)' }}>CARDIO LOG</div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
 
             {/* Distance */}
             <div>
@@ -483,9 +483,9 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
             </div>
 
             {/* Pace */}
-            <div>
+            <div style={{ minWidth: 0 }}>
               <label style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 2, display: 'block', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>PACE</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                 <input
                   type="text"
                   value={cardioLog.pace ?? ''}
@@ -497,9 +497,10 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
                     background: 'var(--muted)', border: '1px solid var(--border)',
                     color: 'var(--foreground)', fontSize: 18, fontFamily: 'var(--font-mono)',
                     outline: 'none', boxSizing: 'border-box', textAlign: 'right', minWidth: 0,
+                    width: 0,
                   }}
                 />
-                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>min/km</span>
+                <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>/km</span>
               </div>
             </div>
           </div>

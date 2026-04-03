@@ -1,4 +1,16 @@
 /**
+ * Clears all custom workout changes in userPlans by setting exercises to null for each plan.
+ * Returns a new userPlans object.
+ */
+export function clearAllCustomWorkouts(userPlans) {
+  if (!userPlans) return {};
+  const cleared = {};
+  for (const key of Object.keys(userPlans)) {
+    cleared[key] = { ...userPlans[key], exercises: null };
+  }
+  return cleared;
+}
+/**
  * planUtils.js
  * ===========
  * Utilities for the custom-plan system.

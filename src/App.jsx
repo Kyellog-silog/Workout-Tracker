@@ -25,6 +25,8 @@ import { SESSION_META, DEFAULT_SCHEDULE } from './data/workouts';
 import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey } from './lib/planUtils';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
+import { clearAllMissedAdjustments } from './lib/scheduler';
+import { clearAllCustomWorkouts } from './lib/planUtils';
 
 const TABS = [
   { id: 'today',    label: 'Today',    icon: 'zap' },
@@ -460,23 +462,21 @@ export default function App() {
                   5-day rotation · Each muscle 2× per week · Smart guard for travel &amp; illness
                 </div>
 
-                {Object.keys(overrides).filter(k => !k.startsWith('__')).length > 0 && (
+                {(Object.keys(overrides).filter(k => !k.startsWith('__')).length > 0 ||
+                  Object.values(userPlans).some(up => up.exercises !== null && up.exercises !== undefined)) && (
                   <div style={{
                     marginBottom: 16, padding: '10px 14px', borderRadius: 6,
                     background: 'rgba(166,124,82,0.08)', border: '1px solid rgba(166,124,82,0.2)',
                     fontSize: 12, color: 'var(--primary)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
                   }}>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                      {Object.keys(overrides).filter(k => !k.startsWith('__')).length} adjustment{Object.keys(overrides).filter(k => !k.startsWith('__')).length > 1 ? 's' : ''} active
+                      {Object.keys(overrides).filter(k => !k.startsWith('__')).length} adjustment{Object.keys(overrides).filter(k => !k.startsWith('__')).length !== 1 ? 's' : ''} active
                     </span>
                     <button
                       onClick={() => {
-                        if (confirm('Clear all schedule adjustments?')) {
-                          setOverrides(prev => ({
-                            // Preserve the watermark so the scheduler doesn't re-evaluate historical dates
-                            ...(prev.__processedUpTo ? { __processedUpTo: prev.__processedUpTo } : {}),
-                          }));
+                        if (confirm('Clear all missed workout adjustments?')) {
+                          setOverrides(prev => clearAllMissedAdjustments(prev));
                         }
                       }}
                       style={{
@@ -484,7 +484,19 @@ export default function App() {
                         border: '1px solid var(--border)', borderRadius: 20,
                         padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font-mono)', letterSpacing: 1,
                       }}
-                    >CLEAR ALL</button>
+                    >CLEAR MISSED</button>
+                    <button
+                      onClick={() => {
+                        if (confirm('Clear all custom workout changes?')) {
+                          setUserPlans(prev => clearAllCustomWorkouts(prev));
+                        }
+                      }}
+                      style={{
+                        fontSize: 9, color: 'var(--primary)', background: 'none',
+                        border: '1px solid var(--border)', borderRadius: 20,
+                        padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font-mono)', letterSpacing: 1,
+                      }}
+                    >CLEAR CUSTOM</button>
                   </div>
                 )}
 

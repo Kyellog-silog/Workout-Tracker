@@ -1,4 +1,25 @@
 /**
+ * Clears all missed workout adjustments from overrides (removes all date keys with value 'missed').
+ * Preserves meta keys (starting with '__') and other override types.
+ * Returns a new overrides object.
+ */
+export function clearAllMissedAdjustments(overrides) {
+  if (!overrides) return {};
+  const cleared = {};
+  for (const [key, value] of Object.entries(overrides)) {
+    // Remove all 'missed' and 'rest' overrides (from missed logic)
+    if (!key.startsWith('__') && (value === 'missed' || value === 'rest')) {
+      continue;
+    }
+    // Remove meta keys related to missed logic
+    if (key === '__shifts' || key === '__resumeFrom') {
+      continue;
+    }
+    cleared[key] = value;
+  }
+  return cleared;
+}
+/**
  * SCHEDULING ENGINE v2
  * ====================
  * PPL smart schedule management with miss detection and shift/guard logic.
