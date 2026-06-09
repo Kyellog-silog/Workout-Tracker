@@ -89,7 +89,7 @@ const DEFAULT_DATA = {
 
 export function useSyncedData(passphrase) {
   const [data, setDataRaw] = useState(DEFAULT_DATA);
-  const [syncStatus, setSyncStatus] = useState('loading'); // loading | synced | saving | offline | error
+  const [syncStatus, setSyncStatus] = useState('loading'); // loading | synced | saving | offline
   const debounceTimer = useRef(null);
   const passphraseRef = useRef(passphrase);
   passphraseRef.current = passphrase;

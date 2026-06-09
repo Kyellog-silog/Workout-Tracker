@@ -41,7 +41,6 @@ const STATUS_CONFIG = {
   synced:  { label: 'Synced',   color: '#2c6e7a',                 icon: 'cloudSync' },
   saving:  { label: 'Saving',   color: 'var(--chart-1)',          icon: 'refresh',  pulse: true },
   offline: { label: 'Offline',  color: 'var(--destructive)',       icon: 'cloudOff' },
-  error:   { label: 'Error',    color: 'var(--destructive)',       icon: 'alertTriangle' },
 };
 
 export default function App() {

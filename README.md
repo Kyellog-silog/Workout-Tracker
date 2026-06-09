@@ -65,7 +65,6 @@ workout-tracker/
   package.json            -- Dependencies and scripts
   vite.config.js          -- Vite build configuration
   vercel.json             -- Vercel deployment settings
-  supabase.js             -- Root-level Supabase client (uses env vars via import.meta.env)
   src/
     main.jsx              -- React DOM entry point
     App.jsx               -- Root component: routing, state management, layout
@@ -84,12 +83,12 @@ workout-tracker/
     data/
       workouts.js         -- Programme data: exercises, session metadata, schedule, phases
     hooks/
-      useLocalStorage.js  -- Generic localStorage hook with JSON serialization
       useSyncedData.js    -- Dual-write hook: localStorage + debounced Supabase sync
     lib/
+      crypto.js           -- PBKDF2 key derivation + AES-GCM-256 encrypt/decrypt (Web Crypto)
       scheduler.js        -- Scheduling engine: date utilities, session resolution, smart guard
       scheduler.test.js   -- Test suite for the scheduling engine (run with Node.js)
-      supabase.js         -- Supabase client initialisation, passphrase hashing, CRUD
+      supabase.js         -- Supabase client + encrypted load/save via SECURITY DEFINER RPCs
 ```
 
 ## Getting Started
@@ -107,14 +106,18 @@ npm install
 
 ### Environment Variables
 
-The Supabase client at `src/lib/supabase.js` has credentials embedded for the default project. To use your own Supabase instance, create a `.env` file at the project root:
+The Supabase client at `src/lib/supabase.js` reads its credentials from Vite
+environment variables and throws on startup if they are missing. Create a
+`.env.local` file at the project root (copy `.env.example`):
 
 ```
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-The root-level `supabase.js` reads these via `import.meta.env`.
+The anon key is public by design; the database is protected by Row-Level
+Security plus `get_row` / `put_row` SECURITY DEFINER RPCs (see your private
+`SECURITY.md`), and all payloads are AES-GCM encrypted client-side before storage.
 
 Your Supabase project needs a `ppl_data` table with the following schema:
 
