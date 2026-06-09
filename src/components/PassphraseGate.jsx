@@ -3,18 +3,49 @@
  *
  * Login screen that accepts a user passphrase. On first use, a new record
  * is created in Supabase. On subsequent uses, existing data is loaded.
- * The passphrase is hashed (SHA-256) before being sent to the server;
- * the raw value is only stored in the browser's localStorage for
- * session persistence.
+ * The passphrase never leaves the device in raw form: a PBKDF2-derived
+ * lookup key locates the row and an AES-GCM key (also passphrase-derived)
+ * encrypts the payload (see lib/crypto.js). The raw value is held only in
+ * sessionStorage for the current tab.
  */
 import { useState } from 'react';
 import { Icon } from './Icons';
+
+// A handful of obviously-guessable phrases. Because the passphrase is BOTH the
+// row lookup key and the encryption key, a weak/common phrase means another user
+// (or an attacker who dumped the table) can land on — and decrypt — your data.
+const COMMON_PHRASES = new Set([
+  'password', 'passphrase', '12345678', '123456789', 'qwerty', 'letmein',
+  'workout', 'fitness', 'iron-bear-morning', 'test', 'admin', 'hello',
+]);
+
+/**
+ * Rough, non-blocking strength estimate for the passphrase.
+ * Returns { score: 0-3, label, color }. Mirrors the crypto normalisation
+ * (trim + lowercase) so the warning reflects what actually gets stored.
+ */
+function assessPhrase(raw) {
+  const p = raw.trim().toLowerCase();
+  if (!p) return null;
+  const words = p.split(/[\s-]+/).filter(Boolean);
+  if (p.length < 8 || COMMON_PHRASES.has(p)) {
+    return { score: 0, label: 'WEAK — easy to guess', color: 'var(--destructive)' };
+  }
+  if (p.length < 12 || words.length < 2) {
+    return { score: 1, label: 'FAIR — add more words', color: '#b8860b' };
+  }
+  if (words.length < 3 || p.length < 18) {
+    return { score: 2, label: 'GOOD', color: '#8d6e4c' };
+  }
+  return { score: 3, label: 'STRONG', color: '#5c7a5c' };
+}
 
 export default function PassphraseGate({ onUnlock }) {
   const [phrase, setPhrase] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [show, setShow] = useState(false);
+  const strength = assessPhrase(phrase);
 
   const handleSubmit = async () => {
     if (!phrase.trim()) return;
@@ -112,6 +143,24 @@ export default function PassphraseGate({ onUnlock }) {
             </div>
           </div>
 
+          {/* Strength meter — guidance only, never blocks submission */}
+          {strength && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{
+                    flex: 1, height: 3, borderRadius: 2,
+                    background: i < strength.score ? strength.color : 'var(--border)',
+                    transition: 'background 0.2s',
+                  }} />
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: strength.color, letterSpacing: 1, fontFamily: 'var(--font-mono)' }}>
+                {strength.label}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div style={{
               fontSize: 11, color: 'var(--destructive)', marginBottom: 12,
@@ -141,8 +190,8 @@ export default function PassphraseGate({ onUnlock }) {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 10, color: 'var(--muted-foreground)', lineHeight: 1.8, fontFamily: 'var(--font-mono)' }}>
-          Passphrase is hashed before storage.<br />
-          We never see it. This device will remember it.
+          Your log is encrypted with this passphrase before it leaves the device.<br />
+          We never see it — so choose a phrase no one else would, and don't lose it.
         </div>
       </div>
     </div>

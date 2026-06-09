@@ -19,7 +19,6 @@ import PlanEditor from './components/PlanEditor';
 import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
-import { hashPassphrase, loadFromSupabaseWithHash } from './lib/supabase';
 import { applySmartGuard, todayStr, resolvedSession, addDays, isBefore } from './lib/scheduler';
 import { SESSION_META, DEFAULT_SCHEDULE } from './data/workouts';
 import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey } from './lib/planUtils';
@@ -48,24 +47,12 @@ const STATUS_CONFIG = {
 export default function App() {
   const [passphrase, setPassphrase] = useState(null);
 
-  // On mount: read stored passphrase; if it's a legacy plain-text value
-  // (not a 64-char hex SHA-256 hash), re-hash it and update localStorage.
+  // On mount: restore passphrase from sessionStorage (tab-scoped; cleared on close).
   useEffect(() => {
-    (async () => {
-      try {
-        const stored = localStorage.getItem(PASSPHRASE_KEY);
-        if (!stored) return;
-        const isHash = /^[0-9a-f]{64}$/i.test(stored);
-        if (isHash) {
-          setPassphrase(stored);
-        } else {
-          // Legacy plain-text passphrase — hash it now and overwrite
-          const hash = await hashPassphrase(stored);
-          localStorage.setItem(PASSPHRASE_KEY, hash);
-          setPassphrase(hash);
-        }
-      } catch { /* ignore */ }
-    })();
+    try {
+      const stored = sessionStorage.getItem(PASSPHRASE_KEY);
+      if (stored) setPassphrase(stored);
+    } catch { /* ignore */ }
   }, []);
   const [activeTab, setActiveTab] = useState('today');
   const [pendingAlertEvents, setPendingAlertEvents] = useState([]);
@@ -269,11 +256,10 @@ export default function App() {
     return () => clearTimeout(midnightTimer.current);
   }, [programStart, data]);
 
-  const handleUnlock = async (phrase) => {
-    const hash = await hashPassphrase(phrase);
-    await loadFromSupabaseWithHash(hash);
-    localStorage.setItem(PASSPHRASE_KEY, hash);
-    setPassphrase(hash);
+  const handleUnlock = (phrase) => {
+    const normalized = phrase.trim();
+    sessionStorage.setItem(PASSPHRASE_KEY, normalized);
+    setPassphrase(normalized);
   };
 
   const handleSelectDay = (dateStr) => {
@@ -283,7 +269,7 @@ export default function App() {
 
   const handleSignOut = () => {
     if (confirm('Sign out? Your data stays saved in the cloud.')) {
-      localStorage.removeItem(PASSPHRASE_KEY);
+      sessionStorage.removeItem(PASSPHRASE_KEY);
       setPassphrase(null);
     }
   };

@@ -5,3 +5,6 @@ dist
 .env.*.local
 .DS_Store
 .vercel
+
+# Local-only security runbook (RLS/RPC setup + residual-risk notes). Keep private.
+SECURITY.md

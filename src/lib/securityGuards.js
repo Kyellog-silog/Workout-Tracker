@@ -33,6 +33,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export function validateLoadedData(raw) {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
 
+  // Strip prototype-pollution-prone keys (__proto__/constructor/prototype) from
+  // the entire structure before validating. This makes the "prevent prototype
+  // pollution" guarantee in the sync path real rather than aspirational.
+  raw = sanitizeKeys(raw);
+
   const out = {};
 
   // programStart — null or YYYY-MM-DD

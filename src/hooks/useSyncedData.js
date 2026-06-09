@@ -17,7 +17,7 @@
  * @returns {{ data: object, setData: Function, syncStatus: string }}
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { loadFromSupabaseWithHash, saveToSupabaseWithHash } from '../lib/supabase';
+import { loadFromSupabase, saveToSupabase } from '../lib/supabase';
 import { validateLoadedData } from '../lib/securityGuards';
 
 const LOCAL_KEY = 'ppl-app-data';
@@ -117,7 +117,7 @@ export function useSyncedData(passphrase) {
     if (!passphrase) return;
     setSyncStatus('loading');
 
-    loadFromSupabaseWithHash(passphrase)
+    loadFromSupabase(passphrase)
       .then(remote => {
         const local = readLocal() || DEFAULT_DATA;
 
@@ -146,7 +146,7 @@ export function useSyncedData(passphrase) {
         } else {
           // First time with this passphrase — push local data up
           setDataRaw(local);
-          saveToSupabaseWithHash(passphrase, local)
+          saveToSupabase(passphrase, local)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
@@ -177,7 +177,7 @@ export function useSyncedData(passphrase) {
       clearTimeout(debounceTimer.current);
       setSyncStatus('saving');
       debounceTimer.current = setTimeout(() => {
-        saveToSupabaseWithHash(passphraseRef.current, finalState)
+        saveToSupabase(passphraseRef.current, finalState)
           .then(() => setSyncStatus('synced'))
           .catch(() => setSyncStatus('offline'));
       }, DEBOUNCE_MS);
