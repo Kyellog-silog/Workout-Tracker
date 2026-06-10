@@ -10,6 +10,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useSyncedData } from './hooks/useSyncedData';
+import { useTheme } from './hooks/useTheme';
 import PassphraseGate from './components/PassphraseGate';
 import Calendar from './components/Calendar';
 import WorkoutTracker from './components/WorkoutTracker';
@@ -21,7 +22,7 @@ import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
 import { applySmartGuard, todayStr, resolvedSession, addDays, isBefore } from './lib/scheduler';
 import { SESSION_META, DEFAULT_SCHEDULE } from './data/workouts';
-import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey } from './lib/planUtils';
+import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey, migrateDefaultPlanColors } from './lib/planUtils';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { clearAllMissedAdjustments } from './lib/scheduler';
@@ -44,6 +45,7 @@ const STATUS_CONFIG = {
 };
 
 export default function App() {
+  const { theme, toggle: toggleTheme } = useTheme();
   const [passphrase, setPassphrase] = useState(null);
 
   // On mount: restore passphrase from sessionStorage (tab-scoped; cleared on close).
@@ -182,21 +184,26 @@ export default function App() {
     }));
   };
 
-  // ── One-time migration: customPlans → userPlans, seed weeklySchedule ──
+  // ── One-time migrations: customPlans → userPlans, seed weeklySchedule, and
+  //    remap legacy default session colours to the new "apothecary" palette ──
   useEffect(() => {
     if (syncStatus !== 'synced') return;
-    if (!data.userPlans || !data.weeklySchedule) {
-      setData(p => {
-        const next = {
-          ...p,
-          userPlans: p.userPlans || initUserPlansFromLegacy(p.customPlans || {}),
-          weeklySchedule: p.weeklySchedule || [...DEFAULT_SCHEDULE],
-        };
-        // Clean up old key
-        if (next.customPlans) delete next.customPlans;
-        return next;
-      });
-    }
+
+    const basePlans = data.userPlans || initUserPlansFromLegacy(data.customPlans || {});
+    const needsInit = !data.userPlans || !data.weeklySchedule;
+    const needsRecolor = migrateDefaultPlanColors(basePlans) !== basePlans;
+    if (!needsInit && !needsRecolor) return;
+
+    setData(p => {
+      const next = {
+        ...p,
+        userPlans: migrateDefaultPlanColors(p.userPlans || initUserPlansFromLegacy(p.customPlans || {})),
+        weeklySchedule: p.weeklySchedule || [...DEFAULT_SCHEDULE],
+      };
+      // Clean up old key
+      if (next.customPlans) delete next.customPlans;
+      return next;
+    });
   }, [syncStatus]);
 
   // Midnight check
@@ -289,7 +296,7 @@ export default function App() {
       {/* Header */}
       <header style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(245,241,230,0.94)', backdropFilter: 'blur(16px)',
+        background: 'var(--header-bg)', backdropFilter: 'blur(16px)',
         borderBottom: '1px solid var(--border)',
         padding: '0 12px',
       }}>
@@ -334,7 +341,21 @@ export default function App() {
               fontFamily: 'var(--font-mono)',
             }}>TODAY</button>
 
-            <button onClick={handleSignOut} title="Sign out" style={{
+            <button
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: 'var(--secondary)', border: '1px solid var(--border)',
+                color: 'var(--muted-foreground)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={13} />
+            </button>
+
+            <button onClick={handleSignOut} title="Sign out" aria-label="Sign out" style={{
               width: 28, height: 28, borderRadius: '50%',
               background: 'var(--secondary)', border: '1px solid var(--border)',
               color: 'var(--muted-foreground)', cursor: 'pointer',
@@ -386,7 +407,7 @@ export default function App() {
       {syncStatus === 'loading' && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 200,
-          background: 'rgba(245,241,230,0.9)', backdropFilter: 'blur(8px)',
+          background: 'var(--overlay-bg)', backdropFilter: 'blur(8px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16,
         }}>
           <Icon name="refresh" size={28} color="var(--primary)" style={{ animation: 'pulse 1s infinite' }} />

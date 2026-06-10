@@ -139,6 +139,41 @@ export function initUserPlansFromLegacy(customPlans) {
   return plans;
 }
 
+// ─── Default-colour migration ─────────────────────────────────────────────────
+
+// The original default session colours, persisted into users' saved userPlans
+// at first migration. Mapped to the new "apothecary" palette in SESSION_META.
+const LEGACY_DEFAULT_COLORS = {
+  push: '#a05c2c',
+  pull: '#2c6e7a',
+  legs: '#6b4fa0',
+};
+
+/**
+ * One-time remap of the built-in plan colours to the current SESSION_META
+ * defaults. Only touches a plan whose colour still equals its *legacy* default
+ * (i.e. the user never hand-picked a custom colour), so personal choices are
+ * preserved. Returns the same reference when nothing changed, so callers can
+ * skip a redundant save.
+ */
+export function migrateDefaultPlanColors(userPlans) {
+  if (!userPlans) return userPlans;
+  let changed = false;
+  const out = {};
+  for (const [key, plan] of Object.entries(userPlans)) {
+    const legacy = LEGACY_DEFAULT_COLORS[key];
+    const current = plan?.color?.toLowerCase?.();
+    const next = SESSION_META[key]?.color;
+    if (legacy && next && current === legacy && current !== next.toLowerCase()) {
+      out[key] = { ...plan, color: next };
+      changed = true;
+    } else {
+      out[key] = plan;
+    }
+  }
+  return changed ? out : userPlans;
+}
+
 // ─── Rename ───────────────────────────────────────────────────────────────────
 
 /**

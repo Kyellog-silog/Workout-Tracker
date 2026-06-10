@@ -2,35 +2,45 @@
 
 /* ── Theme variables ───────────────────────────────────────── */
 :root {
-  --card: #fffcf5;
-  --ring: #a67c52;
-  --input: #dbd0ba;
-  --muted: #ece5d8;
-  --accent: #d4c8aa;
-  --border: #dbd0ba;
+  /* ─── LIGHT · "Café au Lait" ──────────────────────────────────
+     Warm parchment + steamed-milk surfaces with a rich roasted-coffee
+     primary. Committed to the brown/coffee family end to end. */
+  --background: #f4ece0;          /* latte foam            */
+  --card:       #fdf8ef;          /* steamed milk          */
+  --popover:    #fdf8ef;
+  --foreground: #3a302a;          /* espresso ink          */
+  --card-foreground: #3a302a;
+  --muted:      #eadfce;          /* oat milk              */
+  --muted-foreground: #6f5c47;    /* cortado               */
+  --secondary:  #e3d6bf;
+  --secondary-foreground: #54473a;
+  --accent:     #d6c4a2;          /* toasted crema         */
+  --accent-foreground: #3a302a;
+  --border:     #d8cab1;
+  --input:      #d8cab1;
+  --ring:       #8a5a2e;
+  --primary:    #8a5a2e;          /* rich roast            */
+  --primary-foreground: #fff8f0;
+  --destructive: #b04a32;         /* terracotta — the one non-brown accent */
+  --destructive-foreground: #fff8f0;
+  --sidebar:    #eadfce;
   --radius: 0.25rem;
-  --chart-1: #a67c52;
-  --chart-2: #8d6e4c;
-  --chart-3: #735a3a;
-  --chart-4: #b3906f;
-  --chart-5: #c0a080;
-  --popover: #fffcf5;
-  --primary: #a67c52;
-  --sidebar: #ece5d8;
+  --shadow-color: 30 28% 16%;
+
+  /* Coffee-scaled charts */
+  --chart-1: #8a5a2e;
+  --chart-2: #a3784a;
+  --chart-3: #6e4a2a;
+  --chart-4: #bb9870;
+  --chart-5: #cdb18b;
+
+  /* Translucent surfaces — kept in-theme so dark mode flips them too */
+  --header-bg:  rgba(244, 236, 224, 0.94);
+  --overlay-bg: rgba(244, 236, 224, 0.90);
+
   --font-mono: 'IBM Plex Mono', monospace;
   --font-sans: 'Libre Baskerville', serif;
   --font-serif: 'Lora', serif;
-  --secondary: #e2d8c3;
-  --background: #f5f1e6;
-  --foreground: #4a3f35;
-  --destructive: #b54a35;
-  --shadow-color: hsl(28 13% 20%);
-  --card-foreground: #4a3f35;
-  --muted-foreground: #7d6b56;
-  --accent-foreground: #4a3f35;
-  --primary-foreground: #ffffff;
-  --secondary-foreground: #5c4d3f;
-  --destructive-foreground: #ffffff;
 
   /* App aliases */
   --bg: var(--background);
@@ -40,34 +50,50 @@
   --font-display: var(--font-serif);
   --font-body: var(--font-sans);
 
-  /* Session colors — warm-shifted for parchment theme */
-  --push-color: #a05c2c;
-  --pull-color: #2c6e7a;
-  --legs-color: #6b4fa0;
-  --rest-color: #7d6b56;
-  --missed-color: #b54a35;
+  /* Session accent colors — "apothecary" earth tones, shared across both themes */
+  --push-color: #b86a3c;   /* terracotta */
+  --pull-color: #4e7d76;   /* verdigris  */
+  --legs-color: #8c5a72;   /* mulberry   */
+  --cardio-color: #7c7a46; /* olive      */
+  --rest-color: #8a7560;   /* taupe      */
+  --missed-color: #b04a32; /* brick      */
 }
 
 .dark {
-  --card: #3a322c;
-  --ring: #c0a080;
-  --input: #4a4039;
-  --muted: #3a322c;
-  --accent: #59493e;
-  --border: #4a4039;
-  --popover: #3a322c;
-  --primary: #c0a080;
-  --sidebar: #2d2621;
-  --secondary: #4a4039;
-  --background: #2d2621;
-  --foreground: #ece5d8;
-  --destructive: #b54a35;
-  --card-foreground: #ece5d8;
-  --muted-foreground: #c5bcac;
-  --accent-foreground: #ece5d8;
-  --primary-foreground: #2d2621;
-  --secondary-foreground: #ece5d8;
-  --destructive-foreground: #ffffff;
+  /* ─── DARK · "Dark Roast" ─────────────────────────────────────
+     Warm espresso browns (never grey-black), oat-milk text, and a
+     caramel-latte primary that lifts off the dark grounds. Tuned to
+     read as the same coffee bag as the light theme, after sundown.
+     (Session accent vars inherit from :root — shared brand colors.) */
+  --background: #1c1611;          /* dark roast            */
+  --card:       #261e17;          /* wet grounds           */
+  --popover:    #261e17;
+  --foreground: #ece0d0;          /* oat milk              */
+  --card-foreground: #ece0d0;
+  --muted:      #2e251c;
+  --muted-foreground: #b6a288;    /* light mocha           */
+  --secondary:  #342a20;
+  --secondary-foreground: #ece0d0;
+  --accent:     #3d3124;
+  --accent-foreground: #ece0d0;
+  --border:     #3a2f23;
+  --input:      #3a2f23;
+  --ring:       #c89968;
+  --primary:    #c89968;          /* caramel latte         */
+  --primary-foreground: #1c1611;
+  --destructive: #d4674a;         /* warm terracotta, lifted for dark */
+  --destructive-foreground: #1c1611;
+  --sidebar:    #17110d;
+  --shadow-color: 24 40% 4%;
+
+  --chart-1: #c89968;
+  --chart-2: #b3835a;
+  --chart-3: #d8b489;
+  --chart-4: #9c7048;
+  --chart-5: #e2c7a1;
+
+  --header-bg:  rgba(28, 22, 17, 0.92);
+  --overlay-bg: rgba(28, 22, 17, 0.90);
 
   --bg: var(--background);
   --surface: var(--card);

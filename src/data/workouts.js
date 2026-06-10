@@ -9,9 +9,9 @@
 export const SESSION_META = {
   push: {
     label: "PUSH",
-    color: "#a05c2c",
-    dimColor: "rgba(160,92,44,0.10)",
-    borderColor: "rgba(160,92,44,0.28)",
+    color: "#b86a3c",
+    dimColor: "rgba(184,106,60,0.10)",
+    borderColor: "rgba(184,106,60,0.28)",
     focus: "Chest · Shoulders · Triceps",
     warmup: [
       "10× Arm circles (forward & back)",
@@ -28,9 +28,9 @@ export const SESSION_META = {
   },
   pull: {
     label: "PULL",
-    color: "#2c6e7a",
-    dimColor: "rgba(44,110,122,0.10)",
-    borderColor: "rgba(44,110,122,0.28)",
+    color: "#4e7d76",
+    dimColor: "rgba(78,125,118,0.10)",
+    borderColor: "rgba(78,125,118,0.28)",
     focus: "Back · Biceps · Rear Delts",
     warmup: [
       "10× Cat-cow stretches",
@@ -47,9 +47,9 @@ export const SESSION_META = {
   },
   legs: {
     label: "LEGS",
-    color: "#6b4fa0",
-    dimColor: "rgba(107,79,160,0.10)",
-    borderColor: "rgba(107,79,160,0.28)",
+    color: "#8c5a72",
+    dimColor: "rgba(140,90,114,0.10)",
+    borderColor: "rgba(140,90,114,0.28)",
     focus: "Quads · Hamstrings · Glutes · Calves",
     warmup: [
       "10× Bodyweight squats (slow, controlled, 3s descent)",
@@ -67,9 +67,9 @@ export const SESSION_META = {
   },
   rest: {
     label: "REST",
-    color: "#7d6b56",
-    dimColor: "rgba(125,107,86,0.08)",
-    borderColor: "rgba(125,107,86,0.2)",
+    color: "#8a7560",
+    dimColor: "rgba(138,117,96,0.08)",
+    borderColor: "rgba(138,117,96,0.2)",
     focus: "Recovery · Mobility",
     warmup: [],
     cooldown: [],
@@ -84,9 +84,9 @@ export const SESSION_META = {
   },
   cardio: {
     label: "CARDIO",
-    color: "#4a7c59",
-    dimColor: "rgba(74,124,89,0.10)",
-    borderColor: "rgba(74,124,89,0.28)",
+    color: "#7c7a46",
+    dimColor: "rgba(124,122,70,0.10)",
+    borderColor: "rgba(124,122,70,0.28)",
     focus: "Cardiovascular · Endurance",
     warmup: [
       "5 min easy walk or slow jog",
@@ -302,18 +302,20 @@ export const DEFAULT_SCHEDULE = [
   "push", "pull", "legs", "rest", "push", "pull", "rest",
 ];
 
-// Preset colour palette for custom plans (earthy / muted, matching app aesthetic)
+// Preset colour palette for custom plans — "apothecary" natural-pigment family.
+// All muted/warm at a similar value so any combination harmonises with the
+// coffee theme while staying distinguishable on the calendar.
 export const PLAN_COLORS = [
-  "#a05c2c", // warm brown (Push default)
-  "#2c6e7a", // teal (Pull default)
-  "#6b4fa0", // purple (Legs default)
-  "#4a7c59", // green (Cardio default)
-  "#7a4a2c", // dark rust
-  "#2c4a7a", // navy
-  "#7a2c55", // rose
-  "#4a6b7a", // steel blue
-  "#6b7a2c", // olive
-  "#7a5c2c", // sand
+  "#b86a3c", // terracotta (Push default)
+  "#4e7d76", // verdigris  (Pull default)
+  "#8c5a72", // mulberry   (Legs default)
+  "#7c7a46", // olive      (Cardio default)
+  "#8a7560", // taupe
+  "#9c5b3a", // rust
+  "#5f7355", // sage
+  "#8a5566", // wine
+  "#a98545", // ochre
+  "#6f8c88", // dusty teal
 ];
 
 export const PROGRESSION_PHASES = [
