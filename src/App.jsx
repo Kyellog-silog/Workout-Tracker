@@ -11,6 +11,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSyncedData } from './hooks/useSyncedData';
 import { useTheme } from './hooks/useTheme';
+import { useConfirm } from './components/ConfirmDialog';
 import PassphraseGate from './components/PassphraseGate';
 import Calendar from './components/Calendar';
 import WorkoutTracker from './components/WorkoutTracker';
@@ -46,6 +47,7 @@ const STATUS_CONFIG = {
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
+  const confirm = useConfirm();
   const [passphrase, setPassphrase] = useState(null);
 
   // On mount: restore passphrase from sessionStorage (tab-scoped; cleared on close).
@@ -157,13 +159,14 @@ export default function App() {
     ));
   };
 
-  const handleDeletePlan = (planKey) => {
+  const handleDeletePlan = async (planKey) => {
     const count = countCompletedSessionsForPlan(planKey, completedDays, programStart, overrides, weeklySchedule);
     const label = userPlans[planKey]?.label || planKey.toUpperCase();
     const msg = count > 0
-      ? `${count} session${count !== 1 ? 's' : ''} logged under ${label}. Past data will be preserved but this plan will be removed from your schedule.\n\nDelete "${label}"?`
-      : `Delete "${label}"? This cannot be undone.`;
-    if (!confirm(msg)) return;
+      ? `${count} session${count !== 1 ? 's' : ''} logged under ${label}. Past data will be preserved but this plan will be removed from your schedule.`
+      : `This cannot be undone.`;
+    const ok = await confirm({ title: `Delete "${label}"?`, message: msg, confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
     setData(prev => deletePlanFromData(
       { ...prev, userPlans: prev.userPlans || initUserPlansFromLegacy(prev.customPlans || {}) },
       planKey, programStart
@@ -222,8 +225,14 @@ export default function App() {
     if (events.length > 0) setPendingAlertEvents(events);
   };
 
-  const handleResetSchedule = () => {
-    if (window.confirm('Are you sure you want to reset your schedule? This will remove all automatic shifts and recalculate your plan from your workout history. This cannot be undone.')) {
+  const handleResetSchedule = async () => {
+    const ok = await confirm({
+      title: 'Reset schedule?',
+      message: 'This removes all automatic shifts and recalculates your plan from your workout history. This cannot be undone.',
+      confirmLabel: 'Reset',
+      danger: true,
+    });
+    if (ok) {
       setData(prev => ({
         ...prev,
         overrides: {
@@ -273,11 +282,15 @@ export default function App() {
     if (activeTab === 'calendar') setActiveTab('today');
   };
 
-  const handleSignOut = () => {
-    if (confirm('Sign out? Your data stays saved in the cloud.')) {
-      sessionStorage.removeItem(PASSPHRASE_KEY);
-      setPassphrase(null);
-    }
+  const handleSignOut = async () => {
+    const ok = await confirm({
+      title: 'Sign out?',
+      message: 'Your data stays saved in the cloud — sign back in with your passphrase anytime.',
+      confirmLabel: 'Sign out',
+    });
+    if (!ok) return;
+    sessionStorage.removeItem(PASSPHRASE_KEY);
+    setPassphrase(null);
   };
 
   const statusCfg = STATUS_CONFIG[syncStatus] || STATUS_CONFIG.synced;
@@ -480,8 +493,8 @@ export default function App() {
                       {Object.keys(overrides).filter(k => !k.startsWith('__')).length} adjustment{Object.keys(overrides).filter(k => !k.startsWith('__')).length !== 1 ? 's' : ''} active
                     </span>
                     <button
-                      onClick={() => {
-                        if (confirm('Clear all missed workout adjustments?')) {
+                      onClick={async () => {
+                        if (await confirm({ title: 'Clear adjustments?', message: 'Remove all missed-workout schedule adjustments?', confirmLabel: 'Clear' })) {
                           setOverrides(prev => clearAllMissedAdjustments(prev));
                         }
                       }}
@@ -492,8 +505,8 @@ export default function App() {
                       }}
                     >CLEAR MISSED</button>
                     <button
-                      onClick={() => {
-                        if (confirm('Clear all custom workout changes?')) {
+                      onClick={async () => {
+                        if (await confirm({ title: 'Clear custom workouts?', message: 'Reset all plans to their default exercises?', confirmLabel: 'Clear' })) {
                           setUserPlans(prev => clearAllCustomWorkouts(prev));
                         }
                       }}

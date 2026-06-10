@@ -13,6 +13,7 @@ import { useState, useRef } from 'react';
 import { SESSION_META, DEFAULT_EXERCISES, EXERCISE_TYPES, PLAN_COLORS } from '../data/workouts';
 import { getPlanMeta, getPlanExercises, isPlanCustomised } from '../lib/planUtils';
 import { Icon } from './Icons';
+import { useConfirm } from './ConfirmDialog';
 
 const MAX_PLANS = 8;
 
@@ -360,6 +361,7 @@ export default function PlanEditor({
   onUpdatePlanColor,
   onUpdatePlanFocus,
 }) {
+  const confirm = useConfirm();
   const planKeys = Object.keys(userPlans || {});
   const [activeSession, setActiveSession] = useState(planKeys[0] || 'push');
   const [importText, setImportText] = useState('');
@@ -388,8 +390,8 @@ export default function PlanEditor({
     setExercises(currentExercises.map((ex, i) => i === index ? { ...ex, [key]: value } : ex));
   const handleAdd = () =>
     setExercises([...currentExercises, { ...EMPTY_EXERCISE, id: genId(safeActive[0] || 'x'), order: currentExercises.length + 1 }]);
-  const handleDelete = (index) => {
-    if (!confirm('Remove this exercise?')) return;
+  const handleDelete = async (index) => {
+    if (!(await confirm({ title: 'Remove exercise?', message: 'It will be removed from this plan for future sessions.', confirmLabel: 'Remove', danger: true }))) return;
     setExercises(currentExercises.filter((_, i) => i !== index).map((ex, i) => ({ ...ex, order: i + 1 })));
   };
   const handleMove = (index, dir) => {
@@ -399,10 +401,10 @@ export default function PlanEditor({
     setExercises(exs.map((ex, i) => ({ ...ex, order: i + 1 })));
   };
 
-  const handleResetSession = () => {
+  const handleResetSession = async () => {
     const defaultKey = userPlans?.[safeActive]?.defaultKey;
     if (!defaultKey) return;
-    if (!confirm(`Reset ${meta.label} to the default plan?`)) return;
+    if (!(await confirm({ title: `Reset ${meta.label}?`, message: 'Restore this plan to its default exercises. Your custom edits to it will be discarded.', confirmLabel: 'Reset', danger: true }))) return;
     setUserPlans(prev => ({
       ...prev,
       [safeActive]: { ...(prev[safeActive] || {}), exercises: null },
@@ -411,15 +413,21 @@ export default function PlanEditor({
 
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setImportError('');
     if (!importText.trim()) { setImportError('Paste some exercises first.'); return; }
+    let parsed;
     try {
-      const parsed = parseTextImport(importText, safeActive);
-      if (parsed.length === 0) { setImportError('Could not parse any exercises.'); return; }
-      if (!confirm(`Import ${parsed.length} exercise(s)? This replaces your current ${meta.label} plan.`)) return;
-      setExercises(parsed); setImportText(''); setShowImport(false);
-    } catch (e) { setImportError('Parse error: ' + e.message); }
+      parsed = parseTextImport(importText, safeActive);
+    } catch (e) { setImportError('Parse error: ' + e.message); return; }
+    if (parsed.length === 0) { setImportError('Could not parse any exercises.'); return; }
+    const ok = await confirm({
+      title: 'Import exercises?',
+      message: `Import ${parsed.length} exercise${parsed.length !== 1 ? 's' : ''}? This replaces your current ${meta.label} plan.`,
+      confirmLabel: 'Import',
+    });
+    if (!ok) return;
+    setExercises(parsed); setImportText(''); setShowImport(false);
   };
 
   const handleFile = (e) => {
