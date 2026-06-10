@@ -18,6 +18,7 @@ import Calendar from './components/Calendar';
 import WorkoutTracker from './components/WorkoutTracker';
 import Stats from './components/Stats';
 import Progression from './components/Progression';
+import Charts from './components/Charts';
 import PlanEditor from './components/PlanEditor';
 import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
@@ -586,6 +587,7 @@ export default function App() {
               userPlans={userPlans}
               weeklySchedule={weeklySchedule}
             />
+            <Charts completedDays={completedDays} userPlans={userPlans} />
             <Progression programStart={programStart} completedDays={completedDays} overrides={overrides} userPlans={userPlans} />
           </div>
         )}
