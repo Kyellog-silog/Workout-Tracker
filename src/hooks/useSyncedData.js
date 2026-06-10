@@ -29,18 +29,18 @@ const LEGACY_LOCAL_KEY = 'ppl-app-data'; // pre-namespacing shared key (purged o
 const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
 
 // Fast, non-cryptographic hash (djb2) used ONLY to partition the local cache per
-// account. The raw passphrase already lives in sessionStorage, so a hash in a
+// account. The raw credentials already live in sessionStorage, so a hash in a
 // localStorage key name exposes nothing new — its sole job is to ensure two
 // accounts on the same browser never share (and therefore never leak) a cache.
-function hashAccount(passphrase) {
-  const s = passphrase.trim().toLowerCase();
+function hashAccount(username, passphrase) {
+  const s = `${(username || '').trim().toLowerCase()}${passphrase.trim().toLowerCase()}`;
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) >>> 0;
   return h.toString(36);
 }
 
-function localKeyFor(passphrase) {
-  return passphrase ? `${LOCAL_PREFIX}:${hashAccount(passphrase)}` : null;
+function localKeyFor(username, passphrase) {
+  return (username && passphrase) ? `${LOCAL_PREFIX}:${hashAccount(username, passphrase)}` : null;
 }
 
 function readLocal(key) {
@@ -69,16 +69,18 @@ const DEFAULT_DATA = {
   })(),
 };
 
-export function useSyncedData(passphrase) {
+export function useSyncedData(username, passphrase) {
   const [data, setDataRaw] = useState(DEFAULT_DATA);
   const [syncStatus, setSyncStatus] = useState('loading'); // loading | synced | saving | offline
   const debounceTimer = useRef(null);
+  const usernameRef = useRef(username);
+  usernameRef.current = username;
   const passphraseRef = useRef(passphrase);
   passphraseRef.current = passphrase;
   // Per-account local-cache key, recomputed on every render so reads/writes
   // and the cross-tab listener always target the *current* account's cache.
-  const localKeyRef = useRef(localKeyFor(passphrase));
-  localKeyRef.current = localKeyFor(passphrase);
+  const localKeyRef = useRef(localKeyFor(username, passphrase));
+  localKeyRef.current = localKeyFor(username, passphrase);
 
   // One-time purge of the legacy shared cache (held the last account's data and
   // was the source of the cross-account leak). Remote is the source of truth.
@@ -109,19 +111,19 @@ export function useSyncedData(passphrase) {
     // Cancel any pending save from the previous account/session.
     clearTimeout(debounceTimer.current);
 
-    if (!passphrase) {
+    if (!passphrase || !username) {
       // Logged out — drop in-memory data so nothing carries into the next login.
       setDataRaw(DEFAULT_DATA);
       return;
     }
 
-    const localKey = localKeyFor(passphrase);
+    const localKey = localKeyFor(username, passphrase);
     // Immediately show THIS account's own cache (or defaults) — never whatever
     // account was previously in memory.
     setDataRaw(readLocal(localKey) || DEFAULT_DATA);
     setSyncStatus('loading');
 
-    loadFromSupabase(passphrase)
+    loadFromSupabase(username, passphrase)
       .then(remote => {
         const local = readLocal(localKey) || DEFAULT_DATA;
 
@@ -141,7 +143,7 @@ export function useSyncedData(passphrase) {
           const seeded = stampSavedAt(local);
           setDataRaw(seeded);
           writeLocal(localKey, seeded);
-          saveToSupabase(passphrase, seeded)
+          saveToSupabase(username, passphrase, seeded)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
@@ -152,7 +154,7 @@ export function useSyncedData(passphrase) {
         if (local) setDataRaw(local);
         setSyncStatus('offline');
       });
-  }, [passphrase]);
+  }, [username, passphrase]);
 
   // Debounced save to Supabase whenever data changes
   const setData = useCallback((updater) => {
@@ -173,7 +175,7 @@ export function useSyncedData(passphrase) {
       clearTimeout(debounceTimer.current);
       setSyncStatus('saving');
       debounceTimer.current = setTimeout(() => {
-        saveToSupabase(passphraseRef.current, finalState)
+        saveToSupabase(usernameRef.current, passphraseRef.current, finalState)
           .then(() => setSyncStatus('synced'))
           .catch(() => setSyncStatus('offline'));
       }, DEBOUNCE_MS);

@@ -2,12 +2,13 @@
  * Supabase client module.
  *
  * Provides loadFromSupabase / saveToSupabase which handle:
- *   - PBKDF2-based lookup key derivation (v2)
+ *   - PBKDF2-based lookup key derivation from username + passphrase (v3)
  *   - AES-GCM-256 encryption of the data payload before storage
- *   - Transparent migration of legacy SHA-256 (v1) rows on first login
+ *   - Transparent migration of legacy v2 (passphrase-only) and v1 (SHA-256)
+ *     rows up to v3 on first login
  *
- * The raw passphrase is NEVER transmitted or stored; only the derived
- * lookup key reaches the database, and the data column holds ciphertext.
+ * Neither the raw passphrase nor username is transmitted or stored; only the
+ * derived lookup key reaches the database, and the data column holds ciphertext.
  *
  * All DB access goes through SECURITY DEFINER RPCs (get_row / put_row) rather
  * than direct table access. This lets the ppl_data table itself be locked down
@@ -16,8 +17,8 @@
  * (= passphrase-derived) it already knows. See SECURITY.md.
  *
  * Database table: ppl_data
- *   - passphrase (text, PK): "v2:" + PBKDF2 hex, or legacy SHA-256 hex
- *   - data (jsonb)          : {v:2, salt, iv, ct} envelope, or legacy plain object
+ *   - passphrase (text, PK): "v3:"/"v2:" + PBKDF2 hex, or legacy SHA-256 hex
+ *   - data (jsonb)          : {v:3, salt, iv, ct} envelope, or legacy v2/plain
  *   - updated_at (timestamptz)
  *
  * RPCs (created in Supabase, see SECURITY.md):
@@ -27,6 +28,7 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   deriveLookupKey,
+  deriveLookupKeyV2,
   encryptPayload,
   decryptPayload,
   legacyHashPassphrase,
@@ -46,65 +48,71 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 /**
  * Loads the user's data from Supabase.
  *
- * Lookup order:
- *   1. PBKDF2 v2 key  → decrypt and return
- *   2. Legacy SHA-256  → migrate (re-save encrypted under v2 key) then return
- *   3. Not found       → return null (new account)
+ * Lookup order (each rung migrates an older row up to v3 on hit):
+ *   1. v3 key (username + passphrase) → decrypt and return
+ *   2. v2 key (passphrase only)       → migrate → return
+ *   3. Legacy SHA-256 (passphrase)    → migrate → return
+ *   4. Not found                      → null (new account)
  *
- * @param {string} phrase - Raw passphrase as entered by the user
+ * @param {string} username - Account username
+ * @param {string} phrase   - Raw passphrase as entered by the user
  * @returns {Promise<object|null>} Decrypted data object, or null if not found
  */
-export async function loadFromSupabase(phrase) {
-  const v2Key = await deriveLookupKey(phrase);
+export async function loadFromSupabase(username, phrase) {
+  const v3Key = await deriveLookupKey(username, phrase);
 
-  // 1. Try v2 lookup. get_row returns the `data` jsonb directly (or null).
-  const { data: v2Payload, error: v2Err } = await supabase
-    .rpc('get_row', { p_key: v2Key });
+  // Fire-and-forget re-save of migrated plaintext under the v3 key.
+  const migrateToV3 = (plain) => {
+    encryptPayload(plain, username, phrase)
+      .then(encrypted => supabase.rpc('put_row', { p_key: v3Key, p_data: encrypted }))
+      .catch(() => {/* migration failure is non-fatal */});
+  };
 
+  // 1. Try v3 lookup. get_row returns the `data` jsonb directly (or null).
+  const { data: v3Payload, error: v3Err } = await supabase.rpc('get_row', { p_key: v3Key });
+  if (v3Err) throw v3Err;
+  if (v3Payload) {
+    if (v3Payload?.v >= 3) return decryptPayload(v3Payload, username, phrase);
+    return v3Payload; // unencrypted (shouldn't happen) — safe fallback
+  }
+
+  // 2. Fall back to the legacy v2 (passphrase-only) row, then migrate.
+  const v2Key = await deriveLookupKeyV2(phrase);
+  const { data: v2Payload, error: v2Err } = await supabase.rpc('get_row', { p_key: v2Key });
   if (v2Err) throw v2Err;
-
   if (v2Payload) {
-    // Encrypted envelope
-    if (v2Payload?.v === 2) return decryptPayload(phrase, v2Payload);
-    // Unencrypted v2 row (shouldn't happen, but safe fallback)
-    return v2Payload;
+    const plain = (v2Payload?.v === 2) ? await decryptPayload(v2Payload, username, phrase) : v2Payload;
+    migrateToV3(plain);
+    return plain;
   }
 
-  // 2. Fall back to legacy SHA-256 row
+  // 3. Fall back to the oldest SHA-256 (passphrase-only) row, then migrate.
   const legacyKey = await legacyHashPassphrase(phrase);
-  const { data: v1Payload, error: v1Err } = await supabase
-    .rpc('get_row', { p_key: legacyKey });
-
+  const { data: v1Payload, error: v1Err } = await supabase.rpc('get_row', { p_key: legacyKey });
   if (v1Err) throw v1Err;
-
   if (v1Payload) {
-    // Migrate: write encrypted copy under v2 key (fire-and-forget; non-blocking)
-    const plainData = v1Payload;
-    encryptPayload(phrase, plainData).then(encrypted =>
-      supabase.rpc('put_row', { p_key: v2Key, p_data: encrypted })
-    ).catch(() => {/* migration failure is non-fatal */});
-
-    return plainData;
+    migrateToV3(v1Payload); // v1 rows stored plaintext
+    return v1Payload;
   }
 
-  // 3. New account
+  // 4. New account
   return null;
 }
 
 /**
- * Saves the user's data to Supabase, encrypted under the v2 key.
+ * Saves the user's data to Supabase, encrypted under the v3 (username +
+ * passphrase) identity.
  *
+ * @param {string} username - Account username
  * @param {string} phrase   - Raw passphrase
  * @param {object} payload  - Data object to encrypt and store
  */
-export async function saveToSupabase(phrase, payload) {
-  const [v2Key, encrypted] = await Promise.all([
-    deriveLookupKey(phrase),
-    encryptPayload(phrase, payload),
+export async function saveToSupabase(username, phrase, payload) {
+  const [v3Key, encrypted] = await Promise.all([
+    deriveLookupKey(username, phrase),
+    encryptPayload(payload, username, phrase),
   ]);
 
-  const { error } = await supabase
-    .rpc('put_row', { p_key: v2Key, p_data: encrypted });
-
+  const { error } = await supabase.rpc('put_row', { p_key: v3Key, p_data: encrypted });
   if (error) throw error;
 }

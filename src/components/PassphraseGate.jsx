@@ -41,18 +41,20 @@ function assessPhrase(raw) {
 }
 
 export default function PassphraseGate({ onUnlock }) {
+  const [username, setUsername] = useState('');
   const [phrase, setPhrase] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [show, setShow] = useState(false);
   const strength = assessPhrase(phrase);
+  const ready = !!(username.trim() && phrase.trim());
 
   const handleSubmit = async () => {
-    if (!phrase.trim()) return;
+    if (!ready) return;
     setLoading(true);
     setError('');
     try {
-      await onUnlock(phrase.trim());
+      await onUnlock(username.trim(), phrase.trim());
     } catch {
       setError('Could not connect. Check your internet connection.');
       setLoading(false);
@@ -103,13 +105,39 @@ export default function PassphraseGate({ onUnlock }) {
           boxShadow: '2px 3px 5px rgba(50,35,20,0.10)',
         }}>
           <div style={{ fontSize: 14, color: 'var(--foreground)', marginBottom: 6, fontWeight: 700 }}>
-            Enter your passphrase
+            Sign in to your log
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 24, lineHeight: 1.7 }}>
-            Any phrase you'll remember. First time? Just type one and your log is created instantly.
+            Your username and passphrase together unlock your data. First time? Pick any pair you'll remember — your log is created instantly.
           </div>
 
-          {/* Input */}
+          {/* Username */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--muted)', border: `1px solid ${error ? 'rgba(181,74,53,0.6)' : 'var(--border)'}`,
+              borderRadius: 4, padding: '0 12px', transition: 'border-color 0.2s',
+            }}>
+              <Icon name="user" size={14} color="var(--muted-foreground)" />
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="username"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{
+                  flex: 1, background: 'none', border: 'none', outline: 'none',
+                  color: 'var(--foreground)', fontSize: 14,
+                  padding: '12px 0', fontFamily: 'var(--font-mono)',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Passphrase */}
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8,
               background: 'var(--muted)', border: `1px solid ${error ? 'rgba(181,74,53,0.6)' : 'var(--border)'}`,
@@ -121,8 +149,7 @@ export default function PassphraseGate({ onUnlock }) {
                 value={phrase}
                 onChange={e => setPhrase(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="e.g. iron-bear-morning"
-                autoFocus
+                placeholder="passphrase"
                 style={{
                   flex: 1, background: 'none', border: 'none', outline: 'none',
                   color: 'var(--foreground)', fontSize: 14,
@@ -173,15 +200,15 @@ export default function PassphraseGate({ onUnlock }) {
 
           <button
             onClick={handleSubmit}
-            disabled={loading || !phrase.trim()}
+            disabled={loading || !ready}
             style={{
               width: '100%', padding: '13px',
               borderRadius: 4,
-              background: loading || !phrase.trim() ? 'var(--accent)' : 'var(--primary)',
+              background: loading || !ready ? 'var(--accent)' : 'var(--primary)',
               border: 'none',
-              color: loading || !phrase.trim() ? 'var(--muted-foreground)' : '#fff',
+              color: loading || !ready ? 'var(--muted-foreground)' : '#fff',
               fontSize: 11, fontWeight: 700, letterSpacing: 3,
-              cursor: loading || !phrase.trim() ? 'not-allowed' : 'pointer',
+              cursor: loading || !ready ? 'not-allowed' : 'pointer',
               transition: 'all 0.2s', fontFamily: 'var(--font-mono)',
             }}
           >
@@ -190,8 +217,8 @@ export default function PassphraseGate({ onUnlock }) {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 10, color: 'var(--muted-foreground)', lineHeight: 1.8, fontFamily: 'var(--font-mono)' }}>
-          Your log is encrypted with this passphrase before it leaves the device.<br />
-          We never see it — so choose a phrase no one else would, and don't lose it.
+          Your username + passphrase encrypt your log before it leaves the device.<br />
+          We never see them — pick a pair no one else would, and don't lose either.
         </div>
       </div>
     </div>

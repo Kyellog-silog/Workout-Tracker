@@ -36,7 +36,7 @@ const TABS = [
   { id: 'progress', label: 'Progress', icon: 'barChart' },
 ];
 
-const PASSPHRASE_KEY = 'ppl-passphrase';
+const IDENTITY_KEY = 'ppl-identity';
 
 const STATUS_CONFIG = {
   loading: { label: 'Syncing',  color: 'var(--muted-foreground)', icon: 'refresh' },
@@ -48,19 +48,22 @@ const STATUS_CONFIG = {
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
   const confirm = useConfirm();
-  const [passphrase, setPassphrase] = useState(null);
+  const [identity, setIdentity] = useState(null); // { username, passphrase } | null
 
-  // On mount: restore passphrase from sessionStorage (tab-scoped; cleared on close).
+  // On mount: restore identity from sessionStorage (tab-scoped; cleared on close).
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem(PASSPHRASE_KEY);
-      if (stored) setPassphrase(stored);
+      const stored = sessionStorage.getItem(IDENTITY_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.username && parsed?.passphrase) setIdentity(parsed);
+      }
     } catch { /* ignore */ }
   }, []);
   const [activeTab, setActiveTab] = useState('today');
   const [pendingAlertEvents, setPendingAlertEvents] = useState([]);
   const midnightTimer = useRef(null);
-  const { data, setData, syncStatus } = useSyncedData(passphrase);
+  const { data, setData, syncStatus } = useSyncedData(identity?.username ?? null, identity?.passphrase ?? null);
 
   const today = todayStr();
   const selectedDate  = data.selectedDate  || today;
@@ -271,10 +274,10 @@ export default function App() {
     return () => clearTimeout(midnightTimer.current);
   }, [programStart, data]);
 
-  const handleUnlock = (phrase) => {
-    const normalized = phrase.trim();
-    sessionStorage.setItem(PASSPHRASE_KEY, normalized);
-    setPassphrase(normalized);
+  const handleUnlock = (username, phrase) => {
+    const id = { username: username.trim(), passphrase: phrase.trim() };
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
+    setIdentity(id);
   };
 
   const handleSelectDay = (dateStr) => {
@@ -289,15 +292,15 @@ export default function App() {
       confirmLabel: 'Sign out',
     });
     if (!ok) return;
-    sessionStorage.removeItem(PASSPHRASE_KEY);
-    setPassphrase(null);
+    sessionStorage.removeItem(IDENTITY_KEY);
+    setIdentity(null);
   };
 
   const statusCfg = STATUS_CONFIG[syncStatus] || STATUS_CONFIG.synced;
   const todaySession = resolvedSession(today, programStart, overrides, weeklySchedule);
   const todayMeta = todaySession ? getPlanMeta(todaySession, userPlans) : null;
 
-  if (!passphrase) return <PassphraseGate onUnlock={handleUnlock} />;
+  if (!identity) return <PassphraseGate onUnlock={handleUnlock} />;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-body)' }}>
