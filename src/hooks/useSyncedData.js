@@ -6,9 +6,12 @@
  * (debounced at 1.5s, for cross-device sync).
  *
  * On initial load:
- * 1. Fetches data from Supabase (remote wins for all fields)
+ * 1. Fetches data from Supabase and reconciles it with localStorage via
+ *    mergeAppData — the side with the newer `_savedAt` stamp wins, and
+ *    completions are unioned so progress can never be silently dropped.
  * 2. Preserves the local selectedDate to avoid overwriting the user's view
- * 3. Falls back to localStorage if Supabase is unreachable
+ * 3. Falls back to localStorage if Supabase is unreachable (no push-back, so a
+ *    failed read can never clobber good remote data)
  *
  * Sync status transitions: loading -> synced | offline
  * On each write: saving -> synced | offline
@@ -19,6 +22,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { loadFromSupabase, saveToSupabase } from '../lib/supabase';
 import { validateLoadedData } from '../lib/securityGuards';
+import { mergeAppData, stampSavedAt } from '../lib/syncMerge';
 
 const LOCAL_KEY = 'ppl-app-data';
 const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
@@ -34,46 +38,6 @@ function readLocal() {
 
 function writeLocal(data) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(data)); } catch {}
-}
-
-/**
- * Deep-merges two completedDays objects.
- * For each date, merges the three sub-keys (checked, notes, sets) independently
- * so that a stale local copy never wipes remote set logs from another device.
- *
- * Strategy per sub-key:
- *   checked / notes — local wins per exercise (local is the "active" device)
- *   sets            — remote sets are preserved for any exercise the local side
- *                     has no entries for; local wins only when it has actual data
- */
-function mergeCompletedDays(remote = {}, local = {}) {
-  const allDates = new Set([...Object.keys(remote), ...Object.keys(local)]);
-  const result = {};
-  for (const date of allDates) {
-    const r = remote[date];
-    const l = local[date];
-    if (!r) { result[date] = l; continue; }
-    if (!l) { result[date] = r; continue; }
-    // Both sides have this date — merge sub-keys
-    const remoteSets = r.sets || {};
-    const localSets  = l.sets || {};
-    const allExIds   = new Set([...Object.keys(remoteSets), ...Object.keys(localSets)]);
-    const mergedSets = {};
-    for (const id of allExIds) {
-      const localEx  = localSets[id];
-      const remoteEx = remoteSets[id];
-      // Use local only if it has actual logged sets; otherwise keep remote
-      mergedSets[id] = (Array.isArray(localEx) && localEx.length > 0) ? localEx : (remoteEx || []);
-    }
-    result[date] = {
-      ...r,
-      ...l,
-      checked: { ...(r.checked || {}), ...(l.checked || {}) },
-      notes:   { ...(r.notes   || {}), ...(l.notes   || {}) },
-      sets:    mergedSets,
-    };
-  }
-  return result;
 }
 
 const DEFAULT_DATA = {
@@ -122,31 +86,22 @@ export function useSyncedData(passphrase) {
         const local = readLocal() || DEFAULT_DATA;
 
         if (remote) {
-          // --- SAFE MERGE LOGIC ---
-          // Validate remote data before merging to prevent prototype pollution
+          // Validate remote (strips prototype-pollution keys) then reconcile by
+          // recency: the newer _savedAt wins, completions are unioned. This is
+          // what prevents a stale device from hiding — or overwriting — fresher
+          // data from another device.
           const validRemote = validateLoadedData(remote) || {};
-          const merged = { ...DEFAULT_DATA, ...validRemote };
-
-          // Keep local selectedDate to not disrupt UI
-          merged.selectedDate = local.selectedDate;
-
-          // If local has a program start but remote doesn't, keep it.
-          if (local.programStart && !validRemote.programStart) {
-            merged.programStart = local.programStart;
-          }
-
-          // Deep merge overrides and completedDays, assuming local is fresher
-          // (A proper CRDT or versioned-field approach would be better long-term)
-          merged.overrides = { ...(validRemote.overrides || {}), ...(local.overrides || {}) };
-          merged.completedDays = mergeCompletedDays(validRemote.completedDays, local.completedDays);
+          const merged = { ...DEFAULT_DATA, ...mergeAppData(validRemote, local) };
 
           setDataRaw(merged);
           writeLocal(merged);
           setSyncStatus('synced');
         } else {
-          // First time with this passphrase — push local data up
-          setDataRaw(local);
-          saveToSupabase(passphrase, local)
+          // First time with this passphrase — push local data up (stamped).
+          const seeded = stampSavedAt(local);
+          setDataRaw(seeded);
+          writeLocal(seeded);
+          saveToSupabase(passphrase, seeded)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
@@ -169,7 +124,8 @@ export function useSyncedData(passphrase) {
       // This prevents a stale `prev` from overwriting fresher state
       // that might have come from another tab via the storage event.
       const currentLocal = readLocal() || DEFAULT_DATA;
-      const finalState = { ...currentLocal, ...next };
+      // Stamp the save so other devices can tell which copy is newer.
+      const finalState = stampSavedAt({ ...currentLocal, ...next });
 
       writeLocal(finalState);
 

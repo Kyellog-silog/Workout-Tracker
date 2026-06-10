@@ -7,9 +7,20 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test-setup.js',
-    // Exclude plain Node.js test files (scheduler, streakCalc, prCalc)
-    // that use console.log/process.exit instead of describe/it
-    exclude: ['**/node_modules/**', 'src/lib/*.test.js'],
-    include: ['src/components/**/*.test.{js,jsx,ts,tsx}'],
+    // The original lib tests (scheduler/streakCalc/prCalc/securityGuards) are
+    // plain Node scripts using console.log/process.exit, not describe/it — run
+    // those with `node src/lib/<name>.test.js`. Newer lib tests written for
+    // vitest (e.g. syncMerge) are picked up here.
+    exclude: [
+      '**/node_modules/**',
+      'src/lib/scheduler.test.js',
+      'src/lib/streakCalc.test.js',
+      'src/lib/prCalc.test.js',
+      'src/lib/securityGuards.test.js',
+    ],
+    include: [
+      'src/components/**/*.test.{js,jsx,ts,tsx}',
+      'src/lib/**/*.test.{js,jsx}',
+    ],
   },
 })
