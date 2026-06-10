@@ -115,7 +115,7 @@ export default function PassphraseGate({ onUnlock, onBack }) {
           border: '1px solid var(--border)',
           borderRadius: 4,
           padding: '32px 28px',
-          boxShadow: '2px 3px 5px rgba(50,35,20,0.10)',
+          boxShadow: 'var(--shadow-md)',
         }}>
           <div style={{ fontSize: 14, color: 'var(--foreground)', marginBottom: 6, fontWeight: 700 }}>
             Sign in to your log

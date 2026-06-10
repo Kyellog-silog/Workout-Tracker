@@ -39,29 +39,52 @@ import { resolvedSession, todayStr } from './scheduler';
  * Priority: userPlans entry → SESSION_META fallback → neutral fallback for
  * deleted/unknown keys (never crashes).
  */
+// ── Theme-aware session colours ───────────────────────────────────────────────
+// Session/plan colours live in data (SESSION_META + userPlans), so they can't be
+// pure CSS variables. To lift them on the dark "espresso" background we brighten
+// every resolved colour by a fixed amount in dark mode. App sets the current
+// theme via setMetaTheme() so getPlanMeta stays a single call site for all
+// session colour rendering across the app.
+let _metaTheme = 'light';
+export function setMetaTheme(theme) { _metaTheme = theme === 'dark' ? 'dark' : 'light'; }
+
+/** Mix a #rrggbb colour toward white by `amt` (0–1). Non-hex inputs pass through. */
+export function lightenHex(hex, amt) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const mix = (c) => Math.round(c + (255 - c) * amt);
+  const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), b = mix(n & 255);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+// Apply the active theme to a meta object: brighten the colour in dark mode and
+// (re)derive the translucent dim/border tints from the resulting colour.
+function _themed(meta) {
+  const color = _metaTheme === 'dark' ? lightenHex(meta.color, 0.16) : meta.color;
+  return { ...meta, color, dimColor: `${color}1A`, borderColor: `${color}47` };
+}
+
 export function getPlanMeta(planKey, userPlans) {
-  if (!planKey) return _neutral('?');
+  if (!planKey) return _themed(_neutral('?'));
 
   const up = userPlans?.[planKey];
   if (up) {
     const base = SESSION_META[up.defaultKey || planKey] || {};
-    const color = up.color || base.color || '#9e9e9e';
-    return {
+    return _themed({
       label:          up.label || planKey.toUpperCase(),
-      color,
-      dimColor:       `${color}1A`,
-      borderColor:    `${color}47`,
+      color:          up.color || base.color || '#9e9e9e',
       focus:          up.focus || base.focus || '',
       warmup:         base.warmup  || [],
       cooldown:       base.cooldown || [],
       restActivities: base.restActivities || [],
-    };
+    });
   }
 
-  if (SESSION_META[planKey]) return SESSION_META[planKey];
+  if (SESSION_META[planKey]) return _themed({ ...SESSION_META[planKey] });
 
   // Deleted / unknown plan key — neutral fallback
-  return _neutral(planKey);
+  return _themed(_neutral(planKey));
 }
 
 function _neutral(planKey) {

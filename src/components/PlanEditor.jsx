@@ -81,7 +81,7 @@ const selectStyle = {
 
 function CtrlBtn({ onClick, disabled, title, children, danger }) {
   return (
-    <button onClick={onClick} disabled={disabled} title={title} style={{
+    <button onClick={onClick} disabled={disabled} title={title} aria-label={title} style={{
       width: 28, height: 28, borderRadius: 4, flexShrink: 0,
       border: `1px solid ${danger ? 'rgba(181,74,53,0.3)' : 'var(--border)'}`,
       background: danger ? 'rgba(181,74,53,0.05)' : 'var(--muted)',
@@ -117,7 +117,7 @@ function ExerciseFormRow({ ex, index, total, onChange, onDelete, onMoveUp, onMov
       borderLeft: `3px solid ${sessionColor}`,
       borderRadius: '0 4px 4px 0',
       overflow: 'hidden',
-      boxShadow: '1px 2px 3px rgba(50,35,20,0.05)',
+      boxShadow: 'var(--shadow-sm)',
     }}>
       {/* ── Row: two visual lines on mobile, single line on desktop ── */}
       <div style={{ padding: '10px 12px' }}>
@@ -231,7 +231,7 @@ function AddPlanModal({ onAdd, onClose }) {
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         zIndex: 401, background: 'var(--card)', border: '1px solid var(--border)',
         borderRadius: 8, padding: '24px 28px', width: 'min(360px, 90vw)',
-        boxShadow: '0 8px 32px rgba(50,35,20,0.18)',
+        boxShadow: 'var(--shadow-lg)',
       }}>
         <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 16, fontFamily: 'var(--font-mono)' }}>NEW PLAN</div>
 

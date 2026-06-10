@@ -2,8 +2,8 @@
  * chartData — pure series builders for the progress charts.
  *
  * All functions read the completedDays map (date → { sets: { exId: [{weight,reps}] } })
- * and return plain arrays ready to plot. Kept dependency-free and side-effect
- * free so they can be unit-tested in isolation.
+ * and the bodyMetrics map (date → { weight, ... }) and return plain arrays ready
+ * to plot. Dependency-free and side-effect free so they can be unit-tested.
  */
 import { epley1RM } from './prCalc';
 
@@ -13,18 +13,26 @@ function num(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
 /**
  * Per-session progression for one exercise, oldest → newest.
+ *
+ * @param {string} exerciseId
+ * @param {object} completedDays
+ * @param {{addBodyweight?:boolean, bodyMetrics?:object}} [opts]
+ *   addBodyweight — fold the logged bodyweight on each date into the load (for
+ *   bodyweight / pull-up movements, where logged "weight" is only added weight).
  * @returns {{date, topWeight, e1rm, volume, topReps}[]}
  */
-export function exerciseProgressSeries(exerciseId, completedDays) {
+export function exerciseProgressSeries(exerciseId, completedDays, opts = {}) {
+  const { addBodyweight = false, bodyMetrics = null } = opts;
   const out = [];
   for (const [date, day] of Object.entries(completedDays || {})) {
     if (!DATE_RE.test(date)) continue;
     const sets = day?.sets?.[exerciseId];
     if (!Array.isArray(sets) || sets.length === 0) continue;
 
+    const bw = addBodyweight ? bodyweightOn(date, bodyMetrics) : 0;
     let topWeight = 0, e1rm = 0, volume = 0, topReps = 0;
     for (const s of sets) {
-      const w = num(s.weight), r = num(s.reps);
+      const w = num(s.weight) + bw, r = num(s.reps);
       if (r <= 0) continue;
       if (w > topWeight) topWeight = w;
       if (r > topReps) topReps = r;
@@ -34,6 +42,35 @@ export function exerciseProgressSeries(exerciseId, completedDays) {
     }
     if (topReps === 0) continue; // no completed sets
     out.push({ date, topWeight, e1rm: Math.round(e1rm * 10) / 10, volume, topReps });
+  }
+  out.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return out;
+}
+
+/**
+ * Bodyweight recorded on `dateStr`, using the nearest entry on or before that
+ * date (falling forward to the earliest later entry if none precede it). 0 when
+ * no bodyweight has been logged.
+ */
+export function bodyweightOn(dateStr, bodyMetrics) {
+  let before = null, after = null;
+  for (const [d, m] of Object.entries(bodyMetrics || {})) {
+    if (!DATE_RE.test(d)) continue;
+    const w = num(m?.weight);
+    if (w <= 0) continue;
+    if (d <= dateStr) { if (!before || d > before.d) before = { d, w }; }
+    else if (!after || d < after.d) after = { d, w };
+  }
+  return before ? before.w : (after ? after.w : 0);
+}
+
+/** Bodyweight log as a sorted series for charting, oldest → newest. */
+export function bodyweightSeries(bodyMetrics) {
+  const out = [];
+  for (const [date, m] of Object.entries(bodyMetrics || {})) {
+    if (!DATE_RE.test(date)) continue;
+    const w = num(m?.weight);
+    if (w > 0) out.push({ date, weight: w });
   }
   out.sort((a, b) => (a.date < b.date ? -1 : 1));
   return out;

@@ -39,7 +39,7 @@ export default function Calendar({
 
   return (
     <>
-      <div style={{ background: 'var(--card)', borderRadius: 4, padding: '24px', border: '1px solid var(--border)', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+      <div style={{ background: 'var(--card)', borderRadius: 4, padding: '24px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
 
         {!programStart && (
           <div style={{
@@ -56,6 +56,7 @@ export default function Calendar({
           <button
             onClick={() => setViewDate(new Date(year, month - 1, 1))}
             className="icon-btn"
+            aria-label="Previous month"
           >
             <Icon name="chevronLeft" size={16} />
           </button>
@@ -65,6 +66,7 @@ export default function Calendar({
           <button
             onClick={() => setViewDate(new Date(year, month + 1, 1))}
             className="icon-btn"
+            aria-label="Next month"
           >
             <Icon name="chevronRight" size={16} />
           </button>
@@ -109,6 +111,8 @@ export default function Calendar({
             return (
               <button
                 key={day}
+                aria-label={`${dateStr}${s ? ', ' + (s.label || session) : ''}${isDone ? ', completed' : ''}`}
+                aria-current={isToday ? 'date' : undefined}
                 onClick={() => {
                   if (!programStart) { setProgramStart(dateStr); }
                   onSelectDay(dateStr);

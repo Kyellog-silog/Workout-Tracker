@@ -5,6 +5,8 @@ import {
   weeklyVolumeSeries,
   weekStart,
   loggedExerciseIds,
+  bodyweightOn,
+  bodyweightSeries,
 } from './chartData';
 
 const days = {
@@ -60,5 +62,42 @@ describe('loggedExerciseIds', () => {
     expect(ids).toContain('p2');
     expect(ids).toContain('p1');
     expect(ids[0]).toBe('p2'); // logged in more sessions
+  });
+});
+
+const bm = {
+  '2026-06-01': { weight: 80 },
+  '2026-06-09': { weight: 78 },
+  'bad-date': { weight: 200 },
+};
+
+describe('bodyweightOn', () => {
+  it('uses the nearest entry on or before the date', () => {
+    expect(bodyweightOn('2026-06-05', bm)).toBe(80);
+    expect(bodyweightOn('2026-06-10', bm)).toBe(78);
+  });
+  it('falls forward when nothing precedes the date', () => {
+    expect(bodyweightOn('2026-05-01', bm)).toBe(80);
+  });
+  it('returns 0 with no bodyweight logged', () => {
+    expect(bodyweightOn('2026-06-05', {})).toBe(0);
+  });
+});
+
+describe('bodyweightSeries', () => {
+  it('returns sorted, valid weight points only', () => {
+    const s = bodyweightSeries(bm);
+    expect(s.map(p => p.date)).toEqual(['2026-06-01', '2026-06-09']);
+    expect(s[0].weight).toBe(80);
+  });
+});
+
+describe('exerciseProgressSeries — bodyweight-adjusted', () => {
+  it('folds bodyweight into the load when addBodyweight is set', () => {
+    const plain = exerciseProgressSeries('p1', days);            // bodyweight pull-ups, weight 0
+    const adj = exerciseProgressSeries('p1', days, { addBodyweight: true, bodyMetrics: bm });
+    expect(isBodyweightSeries(plain)).toBe(true);                // all topWeight 0
+    expect(isBodyweightSeries(adj)).toBe(false);                 // bodyweight added → non-zero
+    expect(adj[0].topWeight).toBe(80);                           // 0 added + 80 bw on 2026-06-01
   });
 });

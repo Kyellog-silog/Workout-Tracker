@@ -70,7 +70,7 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
           <div key={label} style={{
             background: 'var(--card)', border: '1px solid var(--border)',
             borderRadius: 4, padding: '18px 12px', textAlign: 'center',
-            boxShadow: '1px 2px 4px rgba(50,35,20,0.06)',
+            boxShadow: 'var(--shadow-sm)',
           }}>
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 32, color, lineHeight: 1 }}>{value}</div>
             {showFlame && <Icon name="flame" size={12} color={color} style={{ marginTop: 2 }} />}
@@ -85,7 +85,7 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
         <div style={{
           background: 'var(--card)', border: '1px solid var(--border)',
           borderRadius: 4, padding: '14px 20px',
-          boxShadow: '1px 2px 4px rgba(50,35,20,0.06)',
+          boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, fontFamily: 'var(--font-mono)' }}>TOTAL VOLUME LIFTED</div>
@@ -97,7 +97,7 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
       {breakDate && (
         <div style={{
           background: 'var(--card)', border: `1px solid ${restoresLeft > 0 ? '#c48a2f' : 'var(--border)'}`,
-          borderRadius: 4, padding: '14px 18px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)',
+          borderRadius: 4, padding: '14px 18px', boxShadow: 'var(--shadow-sm)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -127,7 +127,7 @@ export default function Stats({ completedDays, programStart, overrides, streakRe
       )}
 
       {/* Session breakdown */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '18px 22px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '18px 22px', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 16, fontFamily: 'var(--font-mono)' }}>SESSION BREAKDOWN</div>
         {Object.entries(sessionCounts).map(([key, count]) => {
           const s = getPlanMeta(key, userPlans);

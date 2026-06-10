@@ -44,7 +44,7 @@ export default function Progression({ programStart, completedDays = {}, override
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '22px 24px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '22px 24px', boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 18, fontFamily: 'var(--font-mono)' }}>DUMBBELL PROGRESSION</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {PROGRESSION_PHASES.map((phase, i) => (
@@ -96,7 +96,7 @@ export default function Progression({ programStart, completedDays = {}, override
 
       {/* Exercise Records */}
       {recordSections.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '22px 24px', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: '22px 24px', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 18, fontFamily: 'var(--font-mono)' }}>EXERCISE RECORDS</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {recordSections.map(({ key, meta, records }) => (

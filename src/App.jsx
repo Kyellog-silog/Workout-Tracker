@@ -19,13 +19,14 @@ import WorkoutTracker from './components/WorkoutTracker';
 import Stats from './components/Stats';
 import Progression from './components/Progression';
 import Charts from './components/Charts';
+import BodyMetrics from './components/BodyMetrics';
 import PlanEditor from './components/PlanEditor';
 import MissedAlert from './components/MissedAlert';
 import RestTimer from './components/RestTimer';
 import { Icon } from './components/Icons';
 import { applySmartGuard, todayStr, resolvedSession, addDays, isBefore } from './lib/scheduler';
 import { SESSION_META, DEFAULT_SCHEDULE } from './data/workouts';
-import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey, migrateDefaultPlanColors } from './lib/planUtils';
+import { getPlanMeta, initUserPlansFromLegacy, renamePlanInData, deletePlanFromData, countCompletedSessionsForPlan, generateUniqueKey, migrateDefaultPlanColors, setMetaTheme } from './lib/planUtils';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { clearAllMissedAdjustments } from './lib/scheduler';
@@ -49,6 +50,9 @@ const STATUS_CONFIG = {
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
+  // Keep session/plan colours in sync with the theme (brightened in dark). Set
+  // during render so getPlanMeta calls in this pass use the correct theme.
+  setMetaTheme(theme);
   const confirm = useConfirm();
   const [identity, setIdentity] = useState(null); // { username, passphrase } | null
   const [showGate, setShowGate] = useState(false); // logged-out: landing vs sign-in gate
@@ -74,6 +78,7 @@ export default function App() {
   const completedDays = data.completedDays || {};
   const overrides     = data.overrides     || {};
   const streakRestores  = data.streakRestores  || {};
+  const bodyMetrics   = data.bodyMetrics   || {};
 
   // ── Custom plans: derive effective userPlans from raw data or legacy customPlans ──
   const userPlans = data.userPlans || initUserPlansFromLegacy(data.customPlans || {});
@@ -135,6 +140,9 @@ export default function App() {
   }));
   const setStreakRestores = (fn) => setData(p => ({
     ...p, streakRestores: typeof fn === 'function' ? fn(p.streakRestores || {}) : fn,
+  }));
+  const setBodyMetrics = (fn) => setData(p => ({
+    ...p, bodyMetrics: typeof fn === 'function' ? fn(p.bodyMetrics || {}) : fn,
   }));
 
   const handleRestoreDay = (dateStr) => {
@@ -396,7 +404,7 @@ export default function App() {
           {TABS.map(tab => {
             const active = activeTab === tab.id;
             return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} aria-current={active ? 'page' : undefined} style={{
                 flex: 1, padding: '12px 4px', cursor: 'pointer',
                 background: 'transparent', border: 'none',
                 borderBottom: active ? `2px solid var(--primary)` : '2px solid transparent',
@@ -587,7 +595,8 @@ export default function App() {
               userPlans={userPlans}
               weeklySchedule={weeklySchedule}
             />
-            <Charts completedDays={completedDays} userPlans={userPlans} />
+            <Charts completedDays={completedDays} userPlans={userPlans} bodyMetrics={bodyMetrics} />
+            <BodyMetrics bodyMetrics={bodyMetrics} setBodyMetrics={setBodyMetrics} />
             <Progression programStart={programStart} completedDays={completedDays} overrides={overrides} userPlans={userPlans} />
           </div>
         )}

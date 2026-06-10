@@ -17,6 +17,7 @@ import { getPlanMeta, getPlanExercises, isPlanCustomised } from '../lib/planUtil
 import { getExerciseHistory, getTodayPRs } from '../lib/prCalc';
 import { Icon } from './Icons';
 import { clampNumber } from '../lib/securityGuards';
+import ExerciseHistoryModal from './ExerciseHistoryModal';
 
 const TYPE_META = {
   dumbbell:   { icon: 'dumbbell', label: 'DB',  color: '#a05c2c' },
@@ -111,6 +112,7 @@ function SetLogger({ exercise, todaySets, lastSessionSets, onSetsChange, session
           <span style={{ fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>reps</span>
           <button
             onClick={e => removeSet(e, i)}
+            aria-label={`Remove set ${i + 1}`}
             style={{
               width: 22, height: 22, borderRadius: '50%', border: '1px solid var(--border)',
               background: 'var(--muted)', cursor: 'pointer', flexShrink: 0,
@@ -146,8 +148,9 @@ function useNarrow() {
   return narrow;
 }
 
-function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNotes, todaySets, onSetsChange, completedDaysHistory }) {
+function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNotes, todaySets, onSetsChange, completedDaysHistory, allDays }) {
   const [expanded, setExpanded] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const narrow = useNarrow();
   const t = TYPE_META[exercise.type] || TYPE_META.bodyweight;
   const hasWeight = exercise.weightStart && parseFloat(exercise.weightStart) > 0;
@@ -163,7 +166,7 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
       background: checked ? `${sessionColor}0D` : 'var(--card)',
       border: `1px solid ${checked ? sessionColor + '50' : 'var(--border)'}`,
       borderRadius: 4, overflow: 'hidden', transition: 'all 0.2s',
-      boxShadow: checked ? 'none' : '1px 2px 4px rgba(50,35,20,0.06)',
+      boxShadow: checked ? 'none' : 'var(--shadow-sm)',
     }}>
       <div
         style={{ display: 'flex', alignItems: 'center', gap: narrow ? 8 : 12, padding: narrow ? '10px 12px' : '13px 16px', cursor: 'pointer' }}
@@ -218,16 +221,25 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
         </div>
 
         {/* Expand chevron */}
-        <span style={{
-          color: 'var(--muted-foreground)', flexShrink: 0,
-          transform: expanded ? 'rotate(180deg)' : 'none', transition: '0.2s',
-        }}>
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(x => !x); }}
+          aria-label={expanded ? 'Collapse details' : 'Expand details'}
+          aria-expanded={expanded}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: 2,
+            color: 'var(--muted-foreground)', flexShrink: 0,
+            transform: expanded ? 'rotate(180deg)' : 'none', transition: '0.2s',
+            display: 'flex', alignItems: 'center',
+          }}
+        >
           <Icon name="chevronDown" size={14} />
-        </span>
+        </button>
 
         {/* Check button */}
         <button
           onClick={e => { e.stopPropagation(); onToggle(); }}
+          aria-label={`Mark ${exercise.name} ${checked ? 'incomplete' : 'complete'}`}
+          aria-pressed={checked}
           style={{
             width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
             border: checked ? `2px solid ${sessionColor}` : '1.5px solid var(--border)',
@@ -299,7 +311,28 @@ function ExerciseCard({ exercise, sessionColor, checked, onToggle, notes, setNot
               }}
             />
           </div>
+
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowHistory(true); }}
+            style={{
+              marginTop: 12, width: '100%', padding: '8px 0', borderRadius: 3,
+              background: 'none', border: '1px solid var(--border)', color: 'var(--muted-foreground)',
+              cursor: 'pointer', fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            <Icon name="barChart" size={11} /> VIEW FULL HISTORY
+          </button>
         </div>
+      )}
+      {showHistory && (
+        <ExerciseHistoryModal
+          exerciseId={exercise.id}
+          exerciseName={exercise.name}
+          sessionColor={sessionColor}
+          completedDays={allDays}
+          onClose={() => setShowHistory(false)}
+        />
       )}
     </div>
   );
@@ -375,7 +408,7 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
 
   if (sessionKey === 'rest') {
     return (
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: 28, boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4, padding: 28, boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ fontSize: 9, color: 'var(--muted-foreground)', letterSpacing: 3, marginBottom: 4, fontFamily: 'var(--font-mono)' }}>{dateLabel.toUpperCase()}</div>
         <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: 28, color: 'var(--muted-foreground)', letterSpacing: 1, marginBottom: 16 }}>Rest Day</div>
         <div style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 16 }}>Recovery is where growth happens. Today's mission:</div>
@@ -616,6 +649,7 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
           todaySets={(dayData.sets || {})[ex.id] || []}
           onSetsChange={(sets) => setExerciseSets(ex.id, sets, parseInt(ex.sets) || 0)}
           completedDaysHistory={completedDaysHistory}
+          allDays={completedDays}
         />
       ))}
 
@@ -640,7 +674,7 @@ export default function WorkoutTracker({ selectedDate, programStart, completedDa
 
 function EmptyState({ icon, title, sub }) {
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 4, padding: 40, border: '1px solid var(--border)', textAlign: 'center', boxShadow: '1px 2px 4px rgba(50,35,20,0.06)' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 4, padding: 40, border: '1px solid var(--border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
         <Icon name={icon} size={36} color="var(--border)" strokeWidth={1} />
       </div>

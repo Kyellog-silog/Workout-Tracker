@@ -35,7 +35,7 @@ export default function MissedAlert({ events, onDismiss }) {
         border: '1px solid var(--border)',
         borderRadius: 6, padding: '28px 24px',
         animation: 'fadeInScale 0.2s ease',
-        boxShadow: '2px 4px 20px rgba(50,35,20,0.15)',
+        boxShadow: 'var(--shadow-lg)',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>

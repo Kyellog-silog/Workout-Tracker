@@ -27,6 +27,11 @@
   --radius: 0.25rem;
   --shadow-color: 30 28% 16%;
 
+  /* Narrative shadows — warm, soft brown for the parchment world */
+  --shadow-sm: 1px 2px 4px rgba(50, 35, 20, 0.06);
+  --shadow-md: 2px 3px 8px rgba(50, 35, 20, 0.10);
+  --shadow-lg: 0 12px 40px rgba(50, 35, 20, 0.18);
+
   /* Coffee-scaled charts */
   --chart-1: #8a5a2e;
   --chart-2: #a3784a;
@@ -85,6 +90,11 @@
   --destructive-foreground: #1c1611;
   --sidebar:    #17110d;
   --shadow-color: 24 40% 4%;
+
+  /* Deeper, near-black shadows so cards lift off the dark roast */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.50);
+  --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.62);
 
   --chart-1: #c89968;
   --chart-2: #b3835a;
@@ -207,6 +217,14 @@ input, textarea, select {
 input:focus, textarea:focus, select:focus {
   border-color: var(--ring);
   box-shadow: 0 0 0 3px rgba(166,124,82,0.15);
+}
+
+/* ── Keyboard focus ────────────────────────────────────────── */
+/* Visible focus ring for keyboard users only (not mouse/touch).
+   :where() keeps specificity at 0 so component styles still win. */
+:where(button, a, select, textarea, input, [tabindex], [role="button"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* ── Utility ───────────────────────────────────────────────── */

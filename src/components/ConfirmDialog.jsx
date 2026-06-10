@@ -92,7 +92,7 @@ function ConfirmDialog({
           position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
           zIndex: 501, background: 'var(--card)', border: '1px solid var(--border)',
           borderRadius: 8, padding: '22px 24px', width: 'min(380px, 92vw)',
-          boxShadow: '0 12px 40px rgba(40,30,18,0.28)',
+          boxShadow: 'var(--shadow-lg)',
           animation: 'fadeInScale 0.16s ease',
         }}
       >

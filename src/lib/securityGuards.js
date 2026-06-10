@@ -106,6 +106,26 @@ export function validateLoadedData(raw) {
     out.streakRestores = {};
   }
 
+  // bodyMetrics — { [YYYY-MM-DD]: { weight, waist, ... finite numbers, notes:string } }
+  if (typeof raw.bodyMetrics === 'object' && raw.bodyMetrics !== null && !Array.isArray(raw.bodyMetrics)) {
+    const bm = {};
+    for (const [dateKey, entry] of Object.entries(raw.bodyMetrics)) {
+      if (!DATE_RE.test(dateKey)) continue;
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+      const clean = {};
+      for (const [k, v] of Object.entries(entry)) {
+        if (k === 'notes') { if (typeof v === 'string') clean.notes = v; continue; }
+        if (v === '' || v === null || v === undefined) continue;
+        const n = Number(v);
+        if (Number.isFinite(n)) clean[k] = n;
+      }
+      bm[dateKey] = clean;
+    }
+    out.bodyMetrics = bm;
+  } else {
+    out.bodyMetrics = {};
+  }
+
   // Preserve unknown extra keys (forward-compatibility)
   for (const key of Object.keys(raw)) {
     if (!(key in out)) out[key] = raw[key];

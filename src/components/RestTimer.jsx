@@ -294,6 +294,7 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
             <button
               onPointerDown={e => e.stopPropagation()}
               onClick={() => setOpen(false)}
+              aria-label="Close rest timer"
               style={{
                 background: 'none',
                 border: 'none',
@@ -371,6 +372,7 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
               {!running ? (
                 <button
                   onClick={start}
+                  aria-label="Start timer"
                   style={{
                     width: 36, height: 36, borderRadius: '50%',
                     background: sessionColor, border: 'none',
@@ -384,6 +386,7 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
               ) : (
                 <button
                   onClick={pause}
+                  aria-label="Pause timer"
                   style={{
                     width: 36, height: 36, borderRadius: '50%',
                     background: 'var(--muted)', border: '1px solid var(--border)',
@@ -397,6 +400,7 @@ export default function RestTimer({ sessionColor = 'var(--primary)' }) {
               {(remaining > 0 || finished) && (
                 <button
                   onClick={reset}
+                  aria-label="Reset timer"
                   style={{
                     width: 36, height: 36, borderRadius: '50%',
                     background: 'var(--muted)', border: '1px solid var(--border)',
