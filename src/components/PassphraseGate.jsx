@@ -40,7 +40,7 @@ function assessPhrase(raw) {
   return { score: 3, label: 'STRONG', color: '#5c7a5c' };
 }
 
-export default function PassphraseGate({ onUnlock }) {
+export default function PassphraseGate({ onUnlock, onBack }) {
   const [username, setUsername] = useState('');
   const [phrase, setPhrase] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,6 +72,19 @@ export default function PassphraseGate({ onUnlock }) {
       fontFamily: 'var(--font-body)',
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--muted-foreground)', fontSize: 10, letterSpacing: 2,
+              fontFamily: 'var(--font-mono)', padding: 4,
+            }}
+          >
+            <Icon name="chevronLeft" size={13} /> BACK
+          </button>
+        )}
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div style={{

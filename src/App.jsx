@@ -13,6 +13,7 @@ import { useSyncedData } from './hooks/useSyncedData';
 import { useTheme } from './hooks/useTheme';
 import { useConfirm } from './components/ConfirmDialog';
 import PassphraseGate from './components/PassphraseGate';
+import LandingPage from './components/LandingPage';
 import Calendar from './components/Calendar';
 import WorkoutTracker from './components/WorkoutTracker';
 import Stats from './components/Stats';
@@ -49,6 +50,7 @@ export default function App() {
   const { theme, toggle: toggleTheme } = useTheme();
   const confirm = useConfirm();
   const [identity, setIdentity] = useState(null); // { username, passphrase } | null
+  const [showGate, setShowGate] = useState(false); // logged-out: landing vs sign-in gate
 
   // On mount: restore identity from sessionStorage (tab-scoped; cleared on close).
   useEffect(() => {
@@ -300,7 +302,11 @@ export default function App() {
   const todaySession = resolvedSession(today, programStart, overrides, weeklySchedule);
   const todayMeta = todaySession ? getPlanMeta(todaySession, userPlans) : null;
 
-  if (!identity) return <PassphraseGate onUnlock={handleUnlock} />;
+  if (!identity) {
+    return showGate
+      ? <PassphraseGate onUnlock={handleUnlock} onBack={() => setShowGate(false)} />
+      : <LandingPage onGetStarted={() => setShowGate(true)} theme={theme} onToggleTheme={toggleTheme} />;
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-body)' }}>
