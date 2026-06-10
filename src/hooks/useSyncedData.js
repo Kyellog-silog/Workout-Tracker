@@ -24,20 +24,38 @@ import { loadFromSupabase, saveToSupabase } from '../lib/supabase';
 import { validateLoadedData } from '../lib/securityGuards';
 import { mergeAppData, stampSavedAt } from '../lib/syncMerge';
 
-const LOCAL_KEY = 'ppl-app-data';
+const LOCAL_PREFIX = 'ppl-app-data';
+const LEGACY_LOCAL_KEY = 'ppl-app-data'; // pre-namespacing shared key (purged on mount)
 const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
 
-function readLocal() {
+// Fast, non-cryptographic hash (djb2) used ONLY to partition the local cache per
+// account. The raw passphrase already lives in sessionStorage, so a hash in a
+// localStorage key name exposes nothing new — its sole job is to ensure two
+// accounts on the same browser never share (and therefore never leak) a cache.
+function hashAccount(passphrase) {
+  const s = passphrase.trim().toLowerCase();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+function localKeyFor(passphrase) {
+  return passphrase ? `${LOCAL_PREFIX}:${hashAccount(passphrase)}` : null;
+}
+
+function readLocal(key) {
+  if (!key) return null;
   try {
-    const raw = localStorage.getItem(LOCAL_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return validateLoadedData(parsed);
   } catch { return null; }
 }
 
-function writeLocal(data) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(data)); } catch {}
+function writeLocal(key, data) {
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
 }
 
 const DEFAULT_DATA = {
@@ -57,11 +75,21 @@ export function useSyncedData(passphrase) {
   const debounceTimer = useRef(null);
   const passphraseRef = useRef(passphrase);
   passphraseRef.current = passphrase;
+  // Per-account local-cache key, recomputed on every render so reads/writes
+  // and the cross-tab listener always target the *current* account's cache.
+  const localKeyRef = useRef(localKeyFor(passphrase));
+  localKeyRef.current = localKeyFor(passphrase);
 
-  // Listen for changes from other tabs
+  // One-time purge of the legacy shared cache (held the last account's data and
+  // was the source of the cross-account leak). Remote is the source of truth.
+  useEffect(() => {
+    try { localStorage.removeItem(LEGACY_LOCAL_KEY); } catch { /* ignore */ }
+  }, []);
+
+  // Listen for changes from other tabs (same account only)
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key === LOCAL_KEY) {
+      if (e.key && e.key === localKeyRef.current) {
         try {
           const newValue = JSON.parse(e.newValue);
           if (newValue) {
@@ -78,12 +106,24 @@ export function useSyncedData(passphrase) {
 
   // Initial load: fetch from Supabase, fall back to localStorage
   useEffect(() => {
-    if (!passphrase) return;
+    // Cancel any pending save from the previous account/session.
+    clearTimeout(debounceTimer.current);
+
+    if (!passphrase) {
+      // Logged out — drop in-memory data so nothing carries into the next login.
+      setDataRaw(DEFAULT_DATA);
+      return;
+    }
+
+    const localKey = localKeyFor(passphrase);
+    // Immediately show THIS account's own cache (or defaults) — never whatever
+    // account was previously in memory.
+    setDataRaw(readLocal(localKey) || DEFAULT_DATA);
     setSyncStatus('loading');
 
     loadFromSupabase(passphrase)
       .then(remote => {
-        const local = readLocal() || DEFAULT_DATA;
+        const local = readLocal(localKey) || DEFAULT_DATA;
 
         if (remote) {
           // Validate remote (strips prototype-pollution keys) then reconcile by
@@ -94,40 +134,40 @@ export function useSyncedData(passphrase) {
           const merged = { ...DEFAULT_DATA, ...mergeAppData(validRemote, local) };
 
           setDataRaw(merged);
-          writeLocal(merged);
+          writeLocal(localKey, merged);
           setSyncStatus('synced');
         } else {
           // First time with this passphrase — push local data up (stamped).
           const seeded = stampSavedAt(local);
           setDataRaw(seeded);
-          writeLocal(seeded);
+          writeLocal(localKey, seeded);
           saveToSupabase(passphrase, seeded)
             .then(() => setSyncStatus('synced'))
             .catch(() => setSyncStatus('offline'));
         }
       })
       .catch(() => {
-        // Offline — use localStorage
-        const local = readLocal();
-        if (local) {
-          setDataRaw(local);
-        }
+        // Offline — use this account's local cache only.
+        const local = readLocal(localKey);
+        if (local) setDataRaw(local);
         setSyncStatus('offline');
       });
   }, [passphrase]);
 
   // Debounced save to Supabase whenever data changes
   const setData = useCallback((updater) => {
+    const localKey = localKeyRef.current;
+    if (!localKey) return; // not authenticated — never persist under no account
     setDataRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       // --- CRITICAL: Read latest from localStorage before writing ---
       // This prevents a stale `prev` from overwriting fresher state
       // that might have come from another tab via the storage event.
-      const currentLocal = readLocal() || DEFAULT_DATA;
+      const currentLocal = readLocal(localKey) || DEFAULT_DATA;
       // Stamp the save so other devices can tell which copy is newer.
       const finalState = stampSavedAt({ ...currentLocal, ...next });
 
-      writeLocal(finalState);
+      writeLocal(localKey, finalState);
 
       // Debounce Supabase write
       clearTimeout(debounceTimer.current);
