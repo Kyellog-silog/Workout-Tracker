@@ -29,9 +29,9 @@ const LEGACY_LOCAL_KEY = 'ppl-app-data'; // pre-namespacing shared key (purged o
 const DEBOUNCE_MS = 1500; // save to Supabase 1.5s after last change
 
 // Fast, non-cryptographic hash (djb2) used ONLY to partition the local cache per
-// account. The raw credentials already live in sessionStorage, so a hash in a
-// localStorage key name exposes nothing new — its sole job is to ensure two
-// accounts on the same browser never share (and therefore never leak) a cache.
+// account. The raw credentials already live in localStorage (IDENTITY_KEY), so a
+// hash in a localStorage key name exposes nothing new — its sole job is to ensure
+// two accounts on the same browser never share (and therefore never leak) a cache.
 function hashAccount(username, passphrase) {
   const s = `${(username || '').trim().toLowerCase()}${passphrase.trim().toLowerCase()}`;
   let h = 5381;

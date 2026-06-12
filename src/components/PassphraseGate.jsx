@@ -5,8 +5,8 @@
  * is created in Supabase. On subsequent uses, existing data is loaded.
  * The passphrase never leaves the device in raw form: a PBKDF2-derived
  * lookup key locates the row and an AES-GCM key (also passphrase-derived)
- * encrypts the payload (see lib/crypto.js). The raw value is held only in
- * sessionStorage for the current tab.
+ * encrypts the payload (see lib/crypto.js). The raw value is held in
+ * localStorage so the session persists across browser restarts.
  */
 import { useState } from 'react';
 import { Icon } from './Icons';

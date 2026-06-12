@@ -57,10 +57,11 @@ export default function App() {
   const [identity, setIdentity] = useState(null); // { username, passphrase } | null
   const [showGate, setShowGate] = useState(false); // logged-out: landing vs sign-in gate
 
-  // On mount: restore identity from sessionStorage (tab-scoped; cleared on close).
+  // On mount: restore identity from localStorage so the user stays signed in
+  // across browser restarts (cleared only on explicit sign-out).
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem(IDENTITY_KEY);
+      const stored = localStorage.getItem(IDENTITY_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed?.username && parsed?.passphrase) setIdentity(parsed);
@@ -287,7 +288,7 @@ export default function App() {
 
   const handleUnlock = (username, phrase) => {
     const id = { username: username.trim(), passphrase: phrase.trim() };
-    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
+    localStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
     setIdentity(id);
   };
 
@@ -303,7 +304,7 @@ export default function App() {
       confirmLabel: 'Sign out',
     });
     if (!ok) return;
-    sessionStorage.removeItem(IDENTITY_KEY);
+    localStorage.removeItem(IDENTITY_KEY);
     setIdentity(null);
   };
 
